@@ -7,15 +7,8 @@ Created on Thu Mar  9 10:19:35 2023
 
 import numpy as np
 from scipy.io import loadmat
-from sklearn import decomposition
-from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 import matplotlib
-matplotlib.rcParams['pdf.fonttype'] = 42
-matplotlib.rcParams['ps.fonttype'] = 42
-matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 from scipy import stats
 from scipy.stats import f_oneway, kurtosis, skew
 import os
@@ -23,133 +16,49 @@ from scipy.optimize import curve_fit
 import diptest
 import pandas as pd
 
-
-sigthresh = .05
-pthresh = .05
-region_threshold = .25 #.5 Ryan
-region_width = 4
-base_thresh = 0 #3 Ryan
-
-def get_regions(data, M, threshold, width, base_thresh):
-    upreg = np.where(data>(threshold*M))[0]
-    baseline = np.nanmean(data[~upreg])
-    regions = []
-    if len(upreg)==0:
-        return regions
-    last = upreg[0]
-    i=1
-    currentreg = [last]
-    while i<(len(upreg)-1):
-        curr = upreg[i]
-        if curr == last+1:
-            currentreg.append(curr)
-        else:
-            if len(currentreg)>width:
-                regions.append(currentreg)
-            currentreg = [curr]
-        last = curr        
-        i=i+1
-    if len(currentreg)>width:
-        if np.nanmean(data[currentreg])>base_thresh*baseline:
-            regions.append(currentreg)
-    return regions
-
-def get_single_region(data, M, threshold, width, base_thresh):
-    upreg = np.where(data>(threshold*M))[0]
-    baseline = np.nanmean(data[~upreg])
-    regions = []
-    if len(upreg)==0:
-        return regions
-    
-    last = np.argmax(data[upreg])
-    i=1
-    currentreg = [last]
-    while (last+i) in upreg:
-        currentreg.append(last+i)
-        i = i+1
-    i = 1
-    while (last-i) in upreg:
-        currentreg.append(last-i)
-        i = i+1
-    if len(currentreg)>width:
-        if np.nanmean(data[currentreg])>base_thresh*baseline:
-            regions.append(currentreg)
-    return regions
-
-def divide_LR(alldata, leftchoices, rightchoices, pthresh, region_threshold, region_width, basethresh, single_region = False):
-    '''
-
-    Parameters
-    ----------
-    alldata : neural data (trials x neuron x position)
-    leftchoices : trials in which the animal went left
-    rightchoices : trials in which the animal went right
-
-    Returns
-    -------
-    indices of left preferrring neurons, indices of right preferring neurons, 
-    and indices of neurons with no significant difference in response between
-    the two choices
-
-    '''
-    avgdata = np.nanmean(alldata, axis=0) #neurons x position
-    
-    #transform data by substracting the minimum
-    avgdata = avgdata - np.reshape(np.nanmin(avgdata, axis=1), (-1, 1))
-    
-    left_neurons = []
-    right_neurons = []
-    split_neurons = [] #neurons are still task modulated but not significant choice selective
-    nonmod_neurons = [] #neurons with no peaks
-    
-
-    maxfire = np.nanmax(avgdata, axis=1)
-    rightfires = alldata[rightchoices, :, :]
-    leftfires = alldata[leftchoices, :, :]
-    for i, m in enumerate(maxfire):
-        if single_region:
-            upregions = get_single_region(avgdata[i, :], m, region_threshold, region_width, base_thresh)
-        else:
-            upregions = get_regions(avgdata[i, :], m, region_threshold, region_width, base_thresh)
-        left = False
-        right = False
-        for region in upregions:
-            leftfiring = leftfires[:, i, region]
-            leftactivity = np.nanmean(leftfiring, axis=1)
-            rightfiring = rightfires[:, i, region]
-            rightactivity = np.nanmean(rightfiring, axis=1)
-            tval, pval = stats.ttest_ind(leftactivity, rightactivity)
-            if pval <2*pthresh:
-                if np.nanmean(leftactivity)>np.nanmean(rightactivity):
-                    left = True
-                else:
-                    right = True
-        if not (right and left):
-            if right:
-                right_neurons.append(i)
-            elif left:
-                left_neurons.append(i)
-            else:
-                if len(upregions)>0:
-                    split_neurons.append(i)
-                else:
-                    nonmod_neurons.append(i) 
-        else:
-            if len(upregions)>0:
-                split_neurons.append(i)
-            else:
-                nonmod_neurons.append(i)                  
-    return np.array(left_neurons), np.array(right_neurons), np.array(split_neurons), np.array(nonmod_neurons)
+#set plot labels larger
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 
+#set parameters
+sigthresh = .05 #threshold for significance for evidence selectivity
 
 
 def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choices):
+    '''
+    function to get same output format as ACC and DMS data for the RSC and HPC data
+
+    ===inputs===
+    data: array of neural firing data
+    position: positions corresponding to neural data
+    trial: trial numbers correspondig to each data point
+    Lcuepos: position of left cues
+    Rcuepos: position of right cues
+    mazeID: level of the maze in the shaping protocol
+    corrects: mapping of whether each trial was correct
+    choices: mapping of which choice the animal made on each trial
+
+    ===outputs===
+    neuraldata: array of neural data of shape (trials, neurons, timepoints)
+    trialmap: mapping between trial index and trial number
+    maintrials: trials for which accumulation of evidence was required
+    correcttrials: trials for which the animal was correct
+    lefts: left cues for each trial
+    rights: right cues for each trial
+    leftchoices: trials for which the animal made a left choice
+    rightchoices: trials for which the animal made a right choice
+    '''
+
+    #get relevant data shapes
     n_neurons = np.shape(data)[1]
     trials = list(set([x[0] for x in trial]))
     n_trials = len(trials)
     n_pos = 66
     base = 5
+
+    #setup output arrays
     maintrials = []
     correcttrials = []
     leftchoices = []
@@ -158,11 +67,13 @@ def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choic
     rights = []
     neuraldata = np.zeros((n_trials, n_neurons, n_pos))
     trialmap = np.zeros((n_trials,))
+
+    #for each trial in the list
     for it, t in enumerate(trials):
         trialmap[it] = t
         inds = np.where(trial==t)[0]
         maze = mazeID[inds[0]]
-        if maze >9:
+        if maze >9: #check that trial is an accumulation of evidence maze
             maintrials.append(it)
             #correct trials only includes maintrials
             if corrects[inds[0]]:
@@ -175,27 +86,25 @@ def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choic
         lefts.append(Lcuepos[inds[0]][0][0])
         trialdata = data[inds]
         pos = position[inds]
-        posbinned = base*np.round(pos/base)
+        posbinned = base*np.round(pos/base) #assign position bin to each trial
         avgbypos = np.zeros((n_pos, n_neurons))
         for ip, p in enumerate(range(-30, 300, 5)):
             pis = np.where(posbinned == p)[0]
             if len(pis)>0:
-                avgbypos[ip, :] = np.nanmean(trialdata[pis, :], axis=0)
+                avgbypos[ip, :] = np.nanmean(trialdata[pis, :], axis=0) #take the average of all data within the position bin
             else:
                 avgbypos[ip, :] = avgbypos[ip-1, :]
         neuraldata[it, :, :] = avgbypos.T
     return np.nan_to_num(neuraldata), trialmap, maintrials, correcttrials, lefts, rights, leftchoices, rightchoices
 
-regions = ['ACC', 'DMS', 'HPC', 'RSC']#, 'V1']
+regions = ['ACC', 'DMS', 'HPC', 'RSC']
 
+#identify corresponding matlab files with relevant trial and behavior data
 files = os.listdir('./DMS')
 DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
 
 files = os.listdir('./ACC')
 ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
-
-files = os.listdir('./V1')
-V1matfiles = [f for f in files if f.startswith('nic')]
 
 files = os.listdir('./RSC')
 RSCmatfiles = [f for f in files if f.startswith('nic')]
@@ -203,21 +112,24 @@ RSCmatfiles = [f for f in files if f.startswith('nic')]
 files = os.listdir('./HPC')
 HPCmatfiles = [f for f in files if f.startswith('nic')]
 
-filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]#, V1matfiles]
+filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
 
-fitvsort = pd.DataFrame()
 
+#set up arrays for average activity data with shape 1 x number of positions
 allLCellLChoice = np.zeros((1, 66))
 allLCellRChoice = np.zeros((1, 66))
 
 allRCellLChoice = np.zeros((1, 66))
 allRCellRChoice = np.zeros((1, 66))
 
+#save position means to be able to sort data
 allLeftmups = np.array([])
 allRightmups = np.array([])
 
+#for each region, get average activity of left and right preferring cells, using fit mean position and evidence
 for region, matfiles in zip(regions, filelist):
     print(region)
+    #set up arrays for average activity data for single region
     sortedcells = pd.DataFrame()
     LCellLChoice = np.zeros((1, 66))
     LCellRChoice = np.zeros((1, 66))
@@ -230,14 +142,17 @@ for region, matfiles in zip(regions, filelist):
        
     Leftmups = np.array([])
     Rightmups = np.array([])
-    
+
+    #load data from joint gaussian fits 
     fitparamsCS = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
     fitparamssplit = pd.read_csv(region+'/paramfit/'+region+'allfitparams-split.csv')
-    
     fitparams = pd.concat([fitparamsCS, fitparamssplit], ignore_index=True)
+
+    #iterate over each session
     for file in matfiles:
         data = loadmat(region+'/'+file)
         
+        #load behavioral trial data from preprocessing for ACC and DMS regions
         if region in ['DMS', 'ACC']:
             #create 3d array (trials x neurons x timepoints)
             n_neurons = np.shape(data['out']['FR2_pos'][0][0])[1]
@@ -248,11 +163,11 @@ for region, matfiles in zip(regions, filelist):
             maintrials = data['out']['Trial_Main_Maze'][0][0][0]-1 #subtract one for difference in matlab indexing
             correcttrials = data['out']['correct'][0][0][0]-1
             
-            #get data normalized by position
+            #load data for each position
             for i in range(n_neurons):
                 alldata[:, i, :] = data['out']['FR2_pos'][0][0][0][i]
             
-            #alldata[np.isnan(alldata)]=0 #replace nan values with 0
+            #load vector of position locations
             pos = data['out']['Yposition'][0][0][0]
             
             #get different data subsets for left and right choices
@@ -263,9 +178,7 @@ for region, matfiles in zip(regions, filelist):
             
             lchoices = np.concatenate((leftchoices_correct, leftchoices_incorrect))
             rchoices = np.concatenate((rightchoices_correct, rightchoices_incorrect)) 
-            
-            
-            avgdata = np.nanmean(alldata[:, :, :], axis=0) #neurons x position
+        #load behavioral trial data from preprocessing for HPC and RSC    
         else:
             Fdata = data['nic_output']['ROIactivities'][0][0]
             ndata = data['nic_output']['firingrate2'][0][0]
@@ -279,14 +192,14 @@ for region, matfiles in zip(regions, filelist):
             choices = data['nic_output']['Choice'][0][0]
             
             trial = data['nic_output']['Trial'][0][0]
-               
+
+            #get data in the same format as other dataset   
             alldata, tmap, maintrials, correcttrials, lefts, rights, lchoices, rchoices = get_pos_out(ndata, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choices)
             pos = np.arange(-30, 300, 5)
             
             n_trials, n_neurons, n_pos = np.shape(alldata)
-            
-            #alldata[np.isnan(alldata)]=0
         
+        #load fit parameters from data
         session = file.split('.')[0]
         fileparams = fitparams[fitparams['Session']==session]
         pvals = fileparams['Pval'].values
@@ -295,17 +208,14 @@ for region, matfiles in zip(regions, filelist):
         siges = fileparams['Sige'].values
         corrs = fileparams['Correlation'].values
         
+        #only consider cells with significant evidence tuning
         vp = pvals<sigthresh
-        vc = corrs>.2
-        vmL0 = mues>.5
         
         #get only evidence selective parameters
         evselectiveneurons = fileparams['Neuron'].values[vp]
         mues = mues[vp]
         mups = mups[vp]
         alldata = alldata[:, evselectiveneurons, :]
-
-        print(np.nanmax(alldata))
 
         #restrict to correct trials
         choices = np.zeros(n_trials)
@@ -314,28 +224,27 @@ for region, matfiles in zip(regions, filelist):
         alldata = alldata[correcttrials, :, :]
         lchoices = np.where(choices==1)[0]
         rchoices = np.where(choices==0)[0]
-        
+
+        #define left (leftis) and right (rightis) preferring cells based on the sign of the fit evidence mean (mue)        
         leftis = np.where(mues>0)[0]
         rightis = np.where(mues<0)[0]        
+
+        #find position means for sorting by peak activity
         leftmups = mups[leftis]
         rightmups = mups[rightis]   
-        
         Leftmups = np.concatenate((Leftmups, leftmups))
         Rightmups = np.concatenate((Rightmups, rightmups))
         
-        
-        #work only on the odd trials
-  
+        #split data by whether the animal made a left or right choice
         leftdata = alldata[lchoices, :, :]
         rightdata = alldata[rchoices, :, :]
 
-        
+        #append average activity to the appropriate array for left and right preferring cells
         if len(leftis)>0:
             leftcellsleftchoice = np.nanmean(leftdata[:, leftis, :], axis=0)
             leftcellsrightchoice = np.nanmean(rightdata[:, leftis, :], axis=0)
             LCellLChoice = np.vstack((LCellLChoice, leftcellsleftchoice))
             LCellRChoice = np.vstack((LCellRChoice, leftcellsrightchoice))    
-        
         if len(rightis)>0:
             rightcellsleftchoice = np.nanmean(leftdata[:, rightis, :], axis=0)
             rightcellsrightchoice = np.nanmean(rightdata[:, rightis, :], axis=0)
@@ -345,36 +254,31 @@ for region, matfiles in zip(regions, filelist):
     allLeftmups = np.concatenate((allLeftmups, Leftmups))
     allRightmups = np.concatenate((allRightmups, Rightmups))
     
+    #remove initialized zero array
     LCellLChoice = LCellLChoice[1:, :]
     LCellRChoice = LCellRChoice[1:, :]
     
     allLCellLChoice = np.vstack((allLCellLChoice, LCellLChoice))
     allLCellRChoice = np.vstack((allLCellRChoice, LCellRChoice))
     
-    #newLis = np.argsort(np.argmax((trainLCellLChoice+trainLCellRChoice)/2, axis=1))
+    #resort leftpreferring cell data so always in sequence order
     newLis = np.argsort(Leftmups)
-    
-    #resort data so always in sequence order
     LCellLChoice = LCellLChoice[newLis, :]
     LCellRChoice = LCellRChoice[newLis, :]
     
+    #remove initialized zero array
     RCellLChoice = RCellLChoice[1:, :]
     RCellRChoice = RCellRChoice[1:, :]
     
     allRCellLChoice = np.vstack((allRCellLChoice, RCellLChoice))
     allRCellRChoice = np.vstack((allRCellRChoice, RCellRChoice))
        
-    #newRis = np.argsort(np.argmax((trainRCellRChoice+trainRCellLChoice)/2, axis=1))
-    newRis = np.argsort(Rightmups)
-    
     #resort data so always in sequence order
+    newRis = np.argsort(Rightmups)
     RCellLChoice = RCellLChoice[newRis, :]
     RCellRChoice = RCellRChoice[newRis, :]
 
-    print(region+':'+str(len(newLis)+len(newRis))+', Left:' +str(len(newLis)))
-
-
-    #normalized plots
+    #normalize data to [0,1] range
     for i in range(len(newLis)):
         M = np.nanmax([np.nanmax(LCellLChoice[i, :]), np.nanmax(LCellRChoice[i, :])])
         m = np.nanmin([np.nanmin(LCellLChoice[i, :]), np.nanmin(LCellRChoice[i, :])])
@@ -387,7 +291,7 @@ for region, matfiles in zip(regions, filelist):
         RCellLChoice[i, :] = (RCellLChoice[i, :]-m)/(M-m)
         RCellRChoice[i, :] = (RCellRChoice[i, :]-m)/(M-m)
 
-    
+    #generate sequence plots    
     fig, ax = plt.subplots(2, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis)]})
     
     vm = 1
@@ -414,8 +318,8 @@ for region, matfiles in zip(regions, filelist):
     ax[1,1].set_yticks([])
 
     plt.suptitle(region)
-    #plt.savefig('FitSequences/'+region+'.pdf')
-    
+
+#repeat plotting routine for cells of all regions combined    
 allnewLis = np.argsort(allLeftmups)
 allnewRis = np.argsort(allRightmups)
 
@@ -467,6 +371,3 @@ ax[1,0].set_yticks([])
 ax[1, 1].imshow(allRCellRChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
 ax[1,1].set_xticks([])
 ax[1,1].set_yticks([])
-
-plt.suptitle('All Regions')
-plt.savefig('FitSequences/ALLregions-V1removed.pdf')
