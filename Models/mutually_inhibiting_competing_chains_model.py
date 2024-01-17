@@ -17,20 +17,17 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('trialdata.pkl') #file containing data for set of trials with positions of left and right cues on each trial
 
 #parameters
-a = 1
-b = .2
-c = a
-e = a-b
-P0 = 20
-baseline = 0
-T = 300
-externalI = 20
-
-m = .2
-h = 4
+a = 1 #decay rate
+b = .2 #self-excitation
+c = a #feedforward excitation
+e = a-b #mutual inhibition
+P0 = 20 #position width
+baseline = 0 #starting value
+T = 300 #threshold
+externalI = 10 #external drive
 
 #initialize neural rings
 neurons = 17
@@ -48,34 +45,57 @@ for i in range(1, neurons):
 
 
 def P(t):
+    '''
+    Position gating signal, equal to T+externalI when neuron is active, assuming constant velocity
+    '''
     pos = np.zeros((neurons,))
-    i0 = int(np.floor(t/P0))
+    i0 = int(np.floor(t/P0)) #determine which neuron is currently active
     pos[i0] = T+externalI
     return np.concatenate((pos, pos))
 
 def I(t, Lcues, Rcues):
+    '''
+    External input drive from cues, that contribute a square pulse if a cue occurs within .5cm of the current position
+
+    ===INPUTS===
+    t: current position
+    Lcues: list of positions at which left towers occur
+    Rcues: list of positions at which right towers occur
+    '''
     Lcue = np.abs(t-Lcues)
     if min(Lcue)<.5:
-        IL = 4*np.ones((neurons,))
+        IL = 2*np.ones((neurons,)) #f=2, strength of synaptic connection
     else:
         IL = np.zeros((neurons,))
     Rcue = np.abs(t-Rcues)
     if min(Rcue)<.5:
-        IR = 4*np.ones((neurons,))
+        IR = 2*np.ones((neurons,))
     else:
         IR = np.zeros((neurons,))    
-    return np.concatenate((IL, IR))
+    return np.concatenate((IL, IR)) #concatenate inputs to left chain and inputs to right chain
 
 def correct(sol, Lcues, Rcues):
+    '''
+    Returns boolean of whether the final neuron in the chain with more inputs had greater firing rate
+    '''
     if len(Lcues)>len(Rcues):
         return sol[-1,16]>sol[-1, 33]
     return sol[-1, 16]<sol[-1, 33]
 
 def simulate(Lcues, Rcues, input_noise = False, Inoise = .67):
+    '''
+    Simulate a single trial for a set of input towers
+
+    ===INPUTS===
+    Lcues: list of positions at which left towers occur
+    Rcues: list of positions at which right towers occur
+
+    '''
     #reset simulation
     Lchain = np.zeros((neurons,))
     Rchain = np.zeros((neurons,))
     
+    #initialize chains to baseline level
     Lchain[0] = baseline
     Rchain[0] = baseline
    
@@ -83,127 +103,67 @@ def simulate(Lcues, Rcues, input_noise = False, Inoise = .67):
     Lcues = Lcues+30
     Rcues = Rcues+30
     
-    if input_noise:
+    if input_noise: #option for not integrating some cues in the case of input noise
         Lkeep = np.random.uniform(0, 1, size = len(Lcues))
         Lcues[Lkeep<Inoise] =  500
         Rkeep = np.random.uniform(0, 1, size = len(Rcues))
         Rcues[Rkeep<Inoise] =  500
     
-    #Lcues=np.array([500])
-    #Rcues = np.array([500])
-    
-    def chain(y, t):
+    def chain(y, t): #differential equation, Eq. (1)
         dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0)
         return dydt
-
-
 
     y0 = np.concatenate((Lchain, Rchain))
     
     t = np.linspace(0, 330, 3301)
     
-    sol = odeint(chain, y0, t, hmax=5)
+    sol = odeint(chain, y0, t, hmax=5) #numerically integrate with scipy's odeint
     return sol
 
 #without noise in input
-leftsol = np.zeros((3301, neurons*2))
-rightsol = np.zeros((3301, neurons*2))
 alldata = np.zeros((3301, neurons*2))
 lchoices = []
 rchoices = []
 psychometric = {}
     
-for t in range(len(trialdata)):
+for t in range(len(trialdata)): #loop over all trials in trialdata
     Lcues = trialdata['leftcues'][t]
-    Lcues = np.append(Lcues, 500)
+    Lcues = np.append(Lcues, 500) #append cue to the end to avoid empty arrays
     Rcues = trialdata['rightcues'][t]
     Rcues = np.append(Rcues, 500)
     sol = simulate(Lcues, Rcues)
-    delta = len(Lcues)-len(Rcues)
+    delta = len(Rcues)-len(Lcues) #final cue difference
     
-    if len(Lcues)>len(Rcues):
-        leftsol = np.dstack((leftsol, sol))
-    
-    if len(Rcues)>len(Lcues):
-        rightsol = np.dstack((rightsol, sol))
-    
-    #collect all data to parallel neural analysis
+    #collect all data
     alldata = np.dstack((alldata, sol))
     
+    #keep track of trials for which left or right decisions were made
     wentleft = 1*(sol[-1, 16]>sol[-1, 33])
     wentright = 1*(sol[-1, 16]<sol[-1, 33])
     if wentleft:
-        lchoices.append(t)
+        lchoices.append(t) 
     if wentright:
         rchoices.append(t)
-        
+
+    #track whether the final decision was left or right for different differences in cues    
     if delta in psychometric:
         psychometric[delta].append(wentleft)
     else:
         psychometric[delta] = [wentleft]
 
 
-
+#calculate pyschometric curve
 psychometric.pop(0, 0)
 cuediffs = sorted(psychometric.keys())
 perf = [np.mean(psychometric[c]) for c in cuediffs]
 
 #remove initialized zero array        
-leftsol = leftsol[:, :, 1:]
-rightsol = rightsol[:, :, 1:]
 alldata = alldata[:, :, 1:]
 
+#save all data for use in future analysis
+np.save('MImodel.npy', alldata)
 
-
-plt.figure()
-plt.imshow(np.mean(rightsol,axis=2).T, aspect = 'auto', cmap = 'Greys', origin='lower')
-plt.title('Right Choice Trials')
-plt.xlabel('Position')
-plt.ylabel('Neuron')
-#plt.savefig('SeqPlotRightCompetingChains.pdf', transparent=True)
-
-plt.figure()
-plt.imshow(np.mean(leftsol,axis=2).T, aspect = 'auto', cmap = 'Greys', origin='lower')
-plt.title('Left Choice Trials')
-plt.xlabel('Position')
-plt.ylabel('Neuron')
-#plt.savefig('SeqPlotLeftCompetingChains.pdf', transparent=True)
-
-
-
-'''
-#with noise in input
-psychometricerror = {}
-    
-for t in range(len(trialdata)):
-    Lcues = trialdata['leftcues'][t]
-    Lcues = np.append(Lcues, 500)
-    Rcues = trialdata['rightcues'][t]
-    Rcues = np.append(Rcues, 500)
-    sol = simulate(Lcues, Rcues, input_noise = True)
-    delta = len(Lcues)-len(Rcues)
-    
-    wentleft = 1*(sol[-1, 16]>sol[-1, 33])    
-    if delta in psychometricerror:
-        psychometricerror[delta].append(wentleft)
-    else:
-        psychometricerror[delta] = [wentleft]
-
-psychometricerror.pop(0, 0)
-cuediffserror = sorted(psychometricerror.keys())
-perferror = [np.mean(psychometricerror[c]) for c in cuediffserror]
-
-
-plt.figure()
-plt.plot(cuediffs, perf, color='black', label = 'No Noise')
-plt.plot(cuediffserror, perferror, color='red', label = 'Input Noise')
-plt.xlabel('#L - #R')
-plt.ylabel('Model Performance')
-plt.legend()
-plt.savefig('July12PsychometricCompetingChains.pdf', transparent = True)
-'''
-
-#code for getting sequence plots identical to neural data
+#code for getting sequence plots
 pthresh = .1
 region_threshold = .25 #.5 Ryan
 region_width = 4
@@ -232,9 +192,6 @@ def get_regions(data, M, threshold, width, base_thresh):
         if np.mean(data[currentreg])>base_thresh*baseline:
             regions.append(currentreg)
     return regions
-
-
-
 
 def divide_LR(alldata, leftchoices, rightchoices, pthresh, region_threshold, region_width, basethresh):
 
@@ -309,12 +266,7 @@ RCellRChoice = np.zeros((1, 3301))
 SCellLChoice = np.zeros((1, 3301))
 SCellRChoice = np.zeros((1, 3301))
 
-NCellLChoice = np.zeros((1, 3301))
-NCellRChoice = np.zeros((1, 3301))
-
-
 alldata = alldata.T #transpose for right dimensions for sequence plot
-
 
 avgdata = np.mean(alldata[:, :, :], axis=0) #neurons x position
 
@@ -369,15 +321,6 @@ newSis = np.argsort(np.argmax((SCellLChoice+SCellRChoice)/2, axis=1))
 SCellLChoice = SCellLChoice[newSis, :]
 SCellRChoice = SCellRChoice[newSis, :]
 
-NCellLChoice = NCellLChoice[1:, :]
-NCellRChoice = NCellRChoice[1:, :]
-   
-newNis = np.argsort(np.argmax((NCellLChoice+NCellRChoice)/2, axis=1))
-
-#resort data so always in sequence order
-NCellLChoice = NCellLChoice[newNis, :]
-NCellRChoice = NCellRChoice[newNis, :]
-
 #nonnormalized plots
 fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis), len(newSis)]})
 
@@ -414,83 +357,7 @@ ax[2,1].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
 ax[2,1].set_xlabel('position (cm)')
 ax[2,1].set_yticks([])
 plt.suptitle('NonNormalized Sequences')
-plt.savefig('Oct3MINonNormCompetingChains.pdf', transparent = True)
+plt.show()
 
-plt.figure()
-for i in range(0, len(newNis), 250):
-    plt.plot((NCellLChoice[i, :]+NCellRChoice[i, :])/2)
+
     
-
-#normalized plots
-for i in range(len(newLis)):
-    M = np.max([np.max(LCellLChoice[i, :]), np.max(LCellRChoice[i, :])])
-    m = np.min([np.min(LCellLChoice[i, :]), np.min(LCellRChoice[i, :])])
-    LCellLChoice[i, :] = (LCellLChoice[i, :]-m)/(M-m)
-    LCellRChoice[i, :] = (LCellRChoice[i, :]-m)/(M-m)
-    
-for i in range(len(newRis)):
-    M = np.max([np.max(RCellLChoice[i, :]), np.max(RCellRChoice[i, :])])
-    m = np.min([np.min(RCellLChoice[i, :]), np.min(RCellRChoice[i, :])])
-    RCellLChoice[i, :] = (RCellLChoice[i, :]-m)/(M-m)
-    RCellRChoice[i, :] = (RCellRChoice[i, :]-m)/(M-m)
-
-for i in range(len(newSis)):
-    M = np.max([np.max(SCellLChoice[i, :]), np.max(SCellRChoice[i, :])])
-    m = np.min([np.min(SCellLChoice[i, :]), np.min(SCellRChoice[i, :])])
-    SCellLChoice[i, :] = (SCellLChoice[i, :]-m)/(M-m)
-    SCellRChoice[i, :] = (SCellRChoice[i, :]-m)/(M-m)
-
-fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis), len(newSis)]})
-
-ax[0, 0].imshow(LCellLChoice, cmap = 'Greys', aspect='auto')
-ax[0, 0].set_title('left choice trials')
-ax[0, 0].set_ylabel('left pref.')
-ax[0,0].set_xticks([])
-ax[0,0].set_yticks([])
-
-ax[0, 1].imshow(LCellRChoice, cmap = 'Greys', aspect='auto')
-ax[0, 1].set_title('right choice trials')
-ax[0,1].set_xticks([])
-ax[0,1].set_yticks([])
-
-ax[1, 0].imshow(RCellLChoice, cmap = 'Greys', aspect='auto')
-ax[1, 0].set_ylabel('right pref.')
-ax[1,0].set_xticks([])
-ax[1,0].set_yticks([])
-
-ax[1, 1].imshow(RCellRChoice, cmap = 'Greys', aspect='auto')
-ax[1,1].set_xticks([])
-ax[1,1].set_yticks([])
-
-ax[2, 0].imshow(SCellLChoice, cmap = 'Greys', aspect='auto')
-ax[2, 0].set_ylabel('non-pref.')
-ax[2,0].set_xticks([0, 300, 1300, 2300, 2800, 3300])
-ax[2,0].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-ax[2,0].set_xlabel('position (cm)')
-ax[2,0].set_yticks([])
-
-ax[2, 1].imshow(SCellRChoice, cmap = 'Greys', aspect='auto')
-ax[2,1].set_xticks([0, 300, 1300, 2300, 2800, 3300])
-ax[2,1].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-ax[2,1].set_xlabel('position (cm)')
-ax[2,1].set_yticks([])
-plt.suptitle('Normalized Sequences')
-plt.savefig('Oct3MINormCompetingChains.pdf', transparent = True)
-
-'''
-lchoices = []
-rchoices = []
-for t in range(len(trialdata)):
-    Lcues = trialdata['leftcues'][t]
-    Lcues = np.append(Lcues, 500)
-    Rcues = trialdata['rightcues'][t]
-    Rcues = np.append(Rcues, 500)
-    
-    if len(Lcues)>len(Rcues):
-        lchoices.append(t)
-        
-    if len(Rcues)>len(Lcues):
-        rchoices.append(t)
-np.save('lchoices.npy', lchoices)
-np.save('rchoices.npy', rchoices)
-'''
