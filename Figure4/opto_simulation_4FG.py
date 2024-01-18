@@ -17,87 +17,110 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('trialdata.pkl') #file containing data for set of trials with positions of left and right cues on each trial
 
 #initialize neural rings
 neurons = 35
 timepoints = 17
 Cring = np.zeros((neurons*timepoints,))
 
-P0 = 20
-T = 300
+#set up parameters
+P0 = 20 #postion width
+T = 300 #threshold
+a = 1.1 #decay rate
+b = 0.088 #feedforward synaptic connections
+w0 = 0.12 #parameterization of within layer cosine connectivity
+w1 = -0.9 #parameterization of within layer cosine connectivity
+optostrength = .2 #strength of optogenetic excitation
 
-a = 1.1
-b =2
-w0 = 3
-
-optostrength = 1
+#activation function
+def F(x):
+    return 25*.5*(1+np.tanh(x)) #q=25
 
 #set up synaptic weights
 def phi(i):
     return i*2*np.pi/neurons
 
-def F(x):
-    return .5*(1+np.tanh(x))
+W = np.zeros((neurons*timepoints, neurons*timepoints)) #matrix of all synaptic weights
 
-def O(t, i):
-    opto = np.zeros((neurons*timepoints,))
-    opto[i] = optostrength
-    return opto
-
-W = np.zeros((neurons*timepoints, neurons*timepoints))
-
-bump = np.zeros((neurons, neurons))
+bump = np.zeros((neurons, neurons)) #matrix for synaptic weights within a layer, used for block structure
 for i in range(neurons):
     for j in range(neurons):
-        bump[i, j] = w0*(np.cos(phi(i)-phi(j))-.9)
+        bump[i, j] = w0*(np.cos(phi(i)-phi(j))+w1)
 
 W[:neurons,:neurons] = bump
 
 for i in range(1, timepoints):
     W[neurons*i:neurons*(i+1), neurons*i:neurons*(i+1)]=bump
     
-feedforward = np.zeros((neurons*timepoints, neurons*timepoints))
+feedforward = np.zeros((neurons*timepoints, neurons*timepoints)) #feedforward connections between neurons
 i, j = np.indices(W.shape)
-feedforward[i==j+neurons] = a*b
+feedforward[i==j+neurons] = b
 
+#position gating signal
 def P(t):
     P = np.zeros(neurons*timepoints)
     i = int(np.floor(t/P0))
-    P[neurons*i:neurons*(i+1)]=T
+    P[neurons*i:neurons*(i+1)]=T #assign all neurons at position layer to threshold level
     return P
 
+#external input function
 def I(t, C, Lcues, Rcues):
+    '''
+    === inputs ===
+    t: current position
+    C: activity level of cells in layer
+    Lcues: list of positions with left towers
+    Rcues: list of positions with right towers
+    '''
     Lcue = np.abs(t-Lcues)
-    if min(Lcue)<.5:
-        IL = np.roll(C, -1)
+    if min(Lcue)<.5: #positive 1_left signal if cue within .5cm
+        IL = np.roll(C, -1) #multiply by activity of evidence accumulation cells, shifted to get shifter neuron activity
     else:
         IL = np.zeros((neurons*timepoints,))
-    Rcue = np.abs(t-Rcues)
-    if min(Rcue)<.5:
-        IR = np.roll(C, 1)
+    Rcue = np.abs(t-Rcues) 
+    if min(Rcue)<.5: 
+        IR = np.roll(C, 1) #same for right cues but opposite shift
     else:
         IR = np.zeros((neurons*timepoints,)) 
-    return IL+IR
+    return IL+IR #input sum of right and left input
+
+def O(t, i):
+    opto = np.zeros((neurons*timepoints,))
+    opto[i] = optostrength
+    return opto
 
 def correct(sol, Lcues, Rcues):
-    imax = np.argmax(sol[-1, :])
+    '''
+    determine whether animal makes correct decision depending on location of the peak
+
+    === inputs ===
+    sol: integrated solution
+    Lcues: list of positions of left cues
+    Rcues: list of positions of right cues
+    '''
+    imax = np.argmax(sol[-1, :]) #neuron with maximal activity at the last timepoint
     if len(Lcues)>len(Rcues):
-        return imax<(neurons*timepoints-.5*neurons-1)
+        return imax<(neurons*timepoints-.5*neurons-1) #neuron with maximal activity should be to the left of center on trial with more left cues
     return imax>(neurons*timepoints-.5*neurons)
 
 def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
+    '''
+    simulate a trial for a set of left cue positions (Lcues) and right cue positions (Rcues)
+    '''
     #reset simulation
     Cring = np.zeros((neurons*timepoints,))
     
-    Cring[16] = .6
-    Cring[17] = .7
-    Cring[18] = .6
+    #initialize bump to the center of the first position layer
+    Cring[16] = 15
+    Cring[17] = 17.5
+    Cring[18] = 15
     
+    #add onto cues to account for 30cm precue region
     Lcues= Lcues+30
     Rcues = Rcues+30
 
-    if input_noise:
+    if input_noise: #if considering noise in input, randomly remove cues with probabiliy given by Inoise
         Lkeep = np.random.uniform(0, 1, size = len(Lcues))
         Lcues[Lkeep<Inoise] =  500
         Rkeep = np.random.uniform(0, 1, size = len(Rcues))
@@ -105,11 +128,11 @@ def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
     
 
     def ring(y, t):
-        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+5*I(t, y, Lcues, Rcues)))
+        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+5*I(t, y, Lcues, Rcues))) #differential equation without optogenetic excitation
         return dydt
     
     def optoring(y, t):
-        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+5*I(t, y, Lcues, Rcues)+5*O(t, optoi)))
+        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+I(t, y, Lcues, Rcues)+O(t, optoi))) #modified differential equation with optogenetic excitation
         return dydt
     
     y0 = Cring
@@ -120,13 +143,16 @@ def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
     
     return sol, optosol
 
-#code for getting sequence plots identical to neural data
+#code for getting sequence plots, based on method from Koay et al. (equivalent to left vs. right chains in model but more general for neural data)
 pthresh = .1
-region_threshold = .25 #.5 Ryan
+region_threshold = .25
 region_width = 4
-base_thresh = 0 #3 Ryan
+base_thresh = 0
 
 def get_regions(data, M, threshold, width, base_thresh):
+    ''''
+    identify peaks in neural data defined as regions with activity of at least threshold*M, where M is the maximum of average firing at each position, and width of at least width
+    '''
     upreg = np.where(data>(threshold*M))[0]
     baseline = np.mean(data[~upreg])
     regions = []
@@ -151,21 +177,20 @@ def get_regions(data, M, threshold, width, base_thresh):
     return regions
 
 def divide_LR(alldata, leftchoices, rightchoices, pthresh, region_threshold, region_width, basethresh):
-    '''
+# =============================================================================
+#     Parameters
+#     ----------
+#     alldata : neural data (trials x neuron x position)
+#     leftchoices : trials in which the animal went left
+#     rightchoices : trials in which the animal went right
+# 
+#     Returns
+#     -------
+#     indices of left preferrring neurons, indices of right preferring neurons, 
+#     and indices of neurons with no significant difference in response between
+#     the two choices
+# =============================================================================
 
-    Parameters
-    ----------
-    alldata : neural data (trials x neuron x position)
-    leftchoices : trials in which the animal went left
-    rightchoices : trials in which the animal went right
-
-    Returns
-    -------
-    indices of left preferrring neurons, indices of right preferring neurons, 
-    and indices of neurons with no significant difference in response between
-    the two choices
-
-    '''
     avgdata = np.mean(alldata, axis=0) #neurons x position
     
     #transform data by substracting the minimum
@@ -225,33 +250,33 @@ NCellLChoice = np.zeros((1, 3301))
 NCellRChoice = np.zeros((1, 3301))
 
 
-alldata = np.load('bumpmodel-full-feedforwardinside-faster.npy')
+alldata = np.load('bumpmodel.npy') #load model simulated data
 lchoices = np.load('lchoices.npy')
 rchoices = np.load('rchoices.npy')
 
-avgdata = np.mean(alldata[:, :, :], axis=0) #neurons x position
-
+#use original simulation to sort cells into right and left preferring
 leftis, rightis, splitis, nonis = divide_LR(alldata, lchoices, rchoices, pthresh, region_threshold, region_width, base_thresh)
-
 
 maxchanges = np.zeros((len(leftis), neurons*timepoints))
 
+#for each left preferring cell, simulate model with excitation to that cell
 for i, l in enumerate(leftis):
     Lcues = np.array([500])
     Rcues = np.array([500])
     sol, optosol = simulate(Lcues, Rcues, l)
 
-    delta = optosol-sol
+    delta = optosol-sol #difference in activity with and without stimulation
     
-    increases = np.max(delta, axis=0)
-    decreases = np.min(delta, axis=0)
+    increases = np.max(delta, axis=0) #find maximum positive change
+    decreases = np.min(delta, axis=0) #find maximum negative change
     
     maxchanges[i] = increases+decreases
 
 evidencechanges = maxchanges.copy()
-with open('bumpetuning.pkl', 'rb') as handle:
+with open('bumpetuning.pkl', 'rb') as handle: #load dictionary of neuron to preferred evidence level
     evtuning = pickle.load(handle)
 
+#find neurons at each evidence level to determine changes by evidence level
 neuronsatev = {}
 for n in evtuning.keys():
     e = evtuning[n]
@@ -265,16 +290,13 @@ evlevels = sorted(list(neuronsatev.keys()))
 evavgchange = np.zeros((len(leftis), len(evlevels)))           
 for i, l in enumerate(leftis):
     lev = evtuning[l]
-    ltier = np.floor(l/35)*35
+    ltier = np.floor(l/35)*35 #find which position layer the stimulated neuron is in
     for e, evval in enumerate(evlevels):
         nlist = np.array(neuronsatev[evval])
-        nlist = nlist[nlist>ltier]
+        nlist = nlist[nlist>ltier] #only average neural activity at later positions than the stimulated neuron
         evavgchange[i, e] = np.mean(maxchanges[i, nlist])
         
-
-    
-
-
+#reorder data by choice preference
 leftdata = alldata[lchoices, :, :]
 rightdata = alldata[rchoices, :, :]
 
@@ -300,7 +322,6 @@ SCellRChoice = np.vstack((SCellRChoice, splitcellsrightchoice))
 LCellLChoice = LCellLChoice[1:, :]
 LCellRChoice = LCellRChoice[1:, :]
    
-#newLis = np.argsort(np.argmax((LCellLChoice+LCellRChoice)/2, axis=1))
 newLis = np.argsort(leftis)
 
 maxchanges = maxchanges[newLis, :]
@@ -330,7 +351,6 @@ maxchangesleft = maxchangesleft[:, newLis]
 RCellLChoice = RCellLChoice[1:, :]
 RCellRChoice = RCellRChoice[1:, :]
    
-#newRis = np.argsort(np.argmax((RCellRChoice+RCellLChoice)/2, axis=1))
 newRis = np.argsort(rightis)
 
 #resort data so always in sequence order
@@ -347,47 +367,14 @@ newSis = np.argsort(np.argmax((SCellLChoice+SCellRChoice)/2, axis=1))
 SCellLChoice = SCellLChoice[newSis, :]
 SCellRChoice = SCellRChoice[newSis, :]
 maxchangesplit = maxchangessplit[:, newSis]
-   
-
-#nonnormalized plots
-fig, ax = plt.subplots(1, 3,  gridspec_kw={'width_ratios': [len(newLis), len(newRis), len(newSis)]})
-
-ax[0].imshow(maxchangesleft, cmap = 'bwr', aspect='equal', vmin=-1, vmax=1)
-ax[0].set_xlabel('left cells')
-ax[0].set_ylabel('stimulated left cell')
-ax[0].set_xticks([])
-ax[0].set_yticks([])
-
-ax[1].imshow(maxchangesright, cmap = 'bwr', aspect='equal', vmin=-1, vmax=1)
-ax[1].set_xlabel('right cells')
-ax[1].set_xticks([])
-ax[1].set_yticks([])
-
-ax[2].imshow(maxchangessplit, cmap = 'bwr', aspect='equal', vmin=-1, vmax=1)
-ax[2].set_xlabel('non-pref. cells')
-ax[2].set_xticks([])
-#ax[2].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-#ax[2].set_xlabel('position (cm)')
-ax[2].set_yticks([])
-
-plt.savefig('PlanarBumpOptoHeatmap-FFinside.pdf', transparent= True)
 
 leftresp = maxchangesleft[78, :]
 rightresp = maxchangesright[78, :]
 changes = np.concatenate((leftresp, rightresp))
 
-colors = []
-for c in changes:
-    if c<0:
-        colors.append('blue')
-    else:
-        colors.append('red')
-    
+#plot individual neuron changes for all neurons, sorted by position, then sorted by evidence level within the position    
 plt.figure()
-#plt.axvspan(0, len(leftresp), color = 'red', alpha = .5)
-#plt.axvspan(len(leftresp), len(changes), color = 'blue', alpha = .5)
 plt.bar(np.arange(len(changes)), changes, color = 'k', align = 'edge', width=1)
-#plt.axvspan(76,77, facecolor='yellow', alpha=.4, edgecolor=None)
 plt.axvline(99, color = 'grey', linestyle='--')
 plt.axvline(116, color ='grey', linestyle = '--')
 plt.xlim([0, len(changes)])
@@ -398,26 +385,14 @@ plt.ylabel('change from baseline', fontsize=24)
 plt.xticks([len(leftresp)/2, len(leftresp)+len(rightresp)/2], labels = ['left neurons', 'right neurons'], fontsize=24)
 plt.xlabel('sorted by position', fontsize=24)
 plt.tight_layout()
-plt.savefig('NEWBarOptoBump-truesort-FFinside.pdf', transparent=True)
+plt.show()
 
-
-echanges = evidencechangescombined[76, :]
-
-ecolors = []
-for c in echanges:
-    if c<0:
-        ecolors.append('blue')
-    else:
-        ecolors.append('red')
-  
-cell = np.where(newis==78)[0][0] #not sure this is actually correct cell still...     
+#inset
 plt.figure()
-plt.bar(np.arange(len(changes)), echanges, color = ecolors, align = 'edge', width=1)
-plt.axvspan(cell, cell+1, facecolor='yellow', alpha=.9, edgecolor=None)
-plt.ylabel('change from baseline', fontsize=24)
-plt.xlabel('neurons sorted by evidence', fontsize = 24)
-plt.savefig('BarOptoBump-EvIndividualCells-FFinside.pdf')
+plt.bar(np.arange(len(changes[99:116])), changes[99:116], color = 'k', align='edge', width=1) #subset of cells within same position, sorted by evidence
+plt.show()
 
+#plot responses at each evidence level
 echanges2 = evavgchange[78, :]
 ecolors2 = []
 for c in echanges2:
@@ -426,19 +401,14 @@ for c in echanges2:
     else:
         ecolors2.append('red')
 
-#ecell = evtuning[leftis[newLis[76]]]
 plt.figure()
 plt.bar(-1*np.array(evlevels), echanges2, color = 'k', align = 'edge', width=1)
 plt.ylim([-.75, 1.25])
-#plt.axvspan(ecell,ecell+1, facecolor='yellow', alpha=.4, edgecolor=None)
 plt.ylabel('change from baseline', fontsize=24)
 plt.xlabel('evidence', fontsize = 24)
-plt.savefig('LRSwitch-NEWBarOptoBump-Ev-FFinside.pdf', transparent=True)
+plt.show()
 
-#inset
-plt.figure()
-plt.bar(np.arange(len(changes[99:116])), changes[99:116], color = 'k', align='edge', width=1)
-plt.savefig('BarOpto-inset-FFinside.pdf')
+
 
 
 

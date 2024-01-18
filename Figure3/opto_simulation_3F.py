@@ -251,7 +251,7 @@ leftis, rightis, splitis, nonis = divide_LR(alldata, lchoices, rchoices, pthresh
 
 maxchanges = np.zeros((len(leftis), 2*neurons))
 
-#for each left preferring cell, simulate mdoel with excitation to that cell
+#for each left preferring cell, simulate model with excitation to that cell
 for i, l in enumerate(leftis):
     Lcues = np.array([500])
     Rcues = np.array([500])
