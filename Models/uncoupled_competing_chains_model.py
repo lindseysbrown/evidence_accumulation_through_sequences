@@ -16,41 +16,32 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-
 trialdata = pd.read_pickle('trialdata.pkl') #file containing data for set of trials with positions of left and right cues on each trial
 
 #parameters
-a = 1 #decay rate
-b = .2 #self-excitation
-c = a #feedforward excitation
-e = a-b #mutual inhibition
-P0 = 20 #position width
-baseline = 0 #starting value
-T = 300 #threshold
-externalI = 10 #external drive
+a = 1 #rate of decay and self-excitation
+b = a #feedforward connections
+Plength = 20
+
+T = 300
 
 #initialize neural rings
 neurons = 17
 
 #set up connection matrix
-W = b*np.identity(neurons*2)
+W = a*np.identity(neurons*2)
 
 for i in range(1, neurons):
     #feedfoward connections
-    W[i, i-1] = c
-    W[i+neurons, i-1+neurons] = c
-    #inhibitory connections
-    W[i+neurons, i] = -e
-    W[i, i+neurons] = -e
-
+    W[i, i-1] = b
+    W[i+neurons, i-1+neurons] = b
 
 def P(t):
     '''
-    Position gating signal, equal to T+externalI when neuron is active, assuming constant velocity
+    Position gating signal, equal to T when neuron is active, assuming constant velocity
     '''
     pos = np.zeros((neurons,))
-    i0 = int(np.floor(t/P0)) #determine which neuron is currently active
-    pos[i0] = T+externalI
+    pos[int(np.floor(t/Plength))] = T
     return np.concatenate((pos, pos))
 
 def I(t, Lcues, Rcues):
@@ -64,15 +55,15 @@ def I(t, Lcues, Rcues):
     '''
     Lcue = np.abs(t-Lcues)
     if min(Lcue)<.5:
-        IL = 2*np.ones((neurons,)) #f=2, strength of synaptic connection
+        IL = np.ones((neurons,))
     else:
         IL = np.zeros((neurons,))
     Rcue = np.abs(t-Rcues)
     if min(Rcue)<.5:
-        IR = 2*np.ones((neurons,))
+        IR = np.ones((neurons,))
     else:
         IR = np.zeros((neurons,))    
-    return np.concatenate((IL, IR)) #concatenate inputs to left chain and inputs to right chain
+    return np.concatenate((IL-IR, IR-IL))
 
 def correct(sol, Lcues, Rcues):
     '''
@@ -95,12 +86,10 @@ def simulate(Lcues, Rcues, input_noise = False, Inoise = .67):
     Lchain = np.zeros((neurons,))
     Rchain = np.zeros((neurons,))
     
-    #initialize chains to baseline level
-    Lchain[0] = baseline
-    Rchain[0] = baseline
-   
-    #first 30 cm prior to cue onset
-    Lcues = Lcues+30
+    Lchain[0] = 16.25
+    Rchain[0] = 16.25
+    
+    Lcues= Lcues+30
     Rcues = Rcues+30
     
     if input_noise: #option for not integrating some cues in the case of input noise
@@ -108,8 +97,8 @@ def simulate(Lcues, Rcues, input_noise = False, Inoise = .67):
         Lcues[Lkeep<Inoise] =  500
         Rkeep = np.random.uniform(0, 1, size = len(Rcues))
         Rcues[Rkeep<Inoise] =  500
-    
-    def chain(y, t): #differential equation, Eq. (1)
+
+    def chain(y, t): #differntial equation, Eq. (S2)
         dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0)
         return dydt
 
@@ -161,7 +150,7 @@ perf = [np.mean(psychometric[c]) for c in cuediffs]
 alldata = alldata[:, :, 1:]
 
 #save all data for use in future analysis
-np.save('MImodel.npy', alldata)
+np.save('uncoupledchainsmodel.npy', alldata)
 
 #code for getting sequence plots, based on method from Koay et al. (equivalent to left vs. right chains in model but more general for neural data)
 pthresh = .1
@@ -359,6 +348,3 @@ ax[2,1].set_xlabel('position (cm)')
 ax[2,1].set_yticks([])
 plt.suptitle('NonNormalized Sequences')
 plt.show()
-
-
-    
