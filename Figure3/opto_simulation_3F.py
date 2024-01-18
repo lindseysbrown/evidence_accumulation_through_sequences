@@ -17,18 +17,15 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 #parameters
-a = 1
-b = .2
-c = a
-e = a-b
-P0 = 20
-baseline = 0
-T = 300
-externalI = 20
-optostrength = 1
-
-m = .2
-h = 4
+a = 1 #decay rate
+b = .2 #self-excitation
+c = a #feedforward excitation
+e = a-b #mutual inhibition
+P0 = 20 #position width
+baseline = 0 #starting value
+T = 300 #threshold
+externalI = 10 #external drive
+optostrength = .5 #strength of optogenetic excitation
 
 #initialize neural rings
 neurons = 17
@@ -46,40 +43,67 @@ for i in range(1, neurons):
 
 
 def P(t):
+    '''
+    Position gating signal, equal to T+externalI when neuron is active, assuming constant velocity
+    '''
     pos = np.zeros((neurons,))
-    i0 = int(np.floor(t/P0))
+    i0 = int(np.floor(t/P0)) #determine which neuron is currently active
     pos[i0] = T+externalI
     return np.concatenate((pos, pos))
 
+def I(t, Lcues, Rcues):
+    '''
+    External input drive from cues, that contribute a square pulse if a cue occurs within .5cm of the current position
+
+    ===INPUTS===
+    t: current position
+    Lcues: list of positions at which left towers occur
+    Rcues: list of positions at which right towers occur
+    '''
+    Lcue = np.abs(t-Lcues)
+    if min(Lcue)<.5:
+        IL = 2*np.ones((neurons,)) #f=2, strength of synaptic connection
+    else:
+        IL = np.zeros((neurons,))
+    Rcue = np.abs(t-Rcues)
+    if min(Rcue)<.5:
+        IR = 2*np.ones((neurons,))
+    else:
+        IR = np.zeros((neurons,))    
+    return np.concatenate((IL, IR)) #concatenate inputs to left chain and inputs to right chain
+
 def O(t, i):
+    '''
+    Function for optogenetic input to neuron i in the left chain
+    '''
     optoL = np.zeros((neurons,))
     optoR = np.zeros((neurons,))
     optoL[i] = optostrength
     return np.concatenate((optoL, optoR))  
 
-def I(t, Lcues, Rcues):
-    Lcue = np.abs(t-Lcues)
-    if min(Lcue)<.5:
-        IL = 4*np.ones((neurons,))
-    else:
-        IL = np.zeros((neurons,))
-    Rcue = np.abs(t-Rcues)
-    if min(Rcue)<.5:
-        IR = 4*np.ones((neurons,))
-    else:
-        IR = np.zeros((neurons,))    
-    return np.concatenate((IL, IR))
-
 def correct(sol, Lcues, Rcues):
+    '''
+    Returns boolean of whether the final neuron in the chain with more inputs had greater firing rate
+    '''
     if len(Lcues)>len(Rcues):
         return sol[-1,16]>sol[-1, 33]
     return sol[-1, 16]<sol[-1, 33]
 
 def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
+    '''
+    Simulate a single trial for a set of input towers
+
+    ===INPUTS===
+    Lcues: list of positions at which left towers occur
+    Rcues: list of positions at which right towers occur
+    optoi: neuron being optogenetically excited
+
+    '''
     #reset simulation
     Lchain = np.zeros((neurons,))
     Rchain = np.zeros((neurons,))
     
+    #initialize chains to baseline level
     Lchain[0] = baseline
     Rchain[0] = baseline
    
@@ -87,21 +111,18 @@ def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
     Lcues = Lcues+30
     Rcues = Rcues+30
     
-    if input_noise:
+    if input_noise: #option for not integrating some cues in the case of input noise
         Lkeep = np.random.uniform(0, 1, size = len(Lcues))
         Lcues[Lkeep<Inoise] =  500
         Rkeep = np.random.uniform(0, 1, size = len(Rcues))
         Rcues[Rkeep<Inoise] =  500
     
-    #Lcues=np.array([500])
-    #Rcues = np.array([500])
-    
     def chain(y, t):
-        dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0)
+        dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0) #differential equation without optogenetic excitation
         return dydt
 
     def optochain(y, t):
-        dydt = -a*y+np.maximum(W@y+P(t)+O(t, optoi)+I(t, Lcues, Rcues)-T, 0)
+        dydt = -a*y+np.maximum(W@y+P(t)+O(t, optoi)+I(t, Lcues, Rcues)-T, 0) #modified differential equation with optogenetic excitation
         return dydt
 
 
@@ -109,18 +130,21 @@ def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
     
     t = np.linspace(0, 330, 3301)
     
-    sol = odeint(chain, y0, t, hmax=5)
-    optosol = odeint(optochain, y0, t, hmax=5)
+    sol = odeint(chain, y0, t, hmax=5) #numerically integrate without opto
+    optosol = odeint(optochain, y0, t, hmax=5) #numerically integrate with opto
     
     return sol, optosol
 
-#code for getting sequence plots identical to neural data
+#code for getting sequence plots, based on method from Koay et al. (equivalent to left vs. right chains in model but more general for neural data)
 pthresh = .1
-region_threshold = .25 #.5 Ryan
+region_threshold = .25
 region_width = 4
-base_thresh = 0 #3 Ryan
+base_thresh = 0
 
 def get_regions(data, M, threshold, width, base_thresh):
+    ''''
+    identify peaks in neural data defined as regions with activity of at least threshold*M, where M is the maximum of average firing at each position, and width of at least width
+    '''
     upreg = np.where(data>(threshold*M))[0]
     baseline = np.mean(data[~upreg])
     regions = []
@@ -145,21 +169,20 @@ def get_regions(data, M, threshold, width, base_thresh):
     return regions
 
 def divide_LR(alldata, leftchoices, rightchoices, pthresh, region_threshold, region_width, basethresh):
-    '''
+# =============================================================================
+#     Parameters
+#     ----------
+#     alldata : neural data (trials x neuron x position)
+#     leftchoices : trials in which the animal went left
+#     rightchoices : trials in which the animal went right
+# 
+#     Returns
+#     -------
+#     indices of left preferrring neurons, indices of right preferring neurons, 
+#     and indices of neurons with no significant difference in response between
+#     the two choices
+# =============================================================================
 
-    Parameters
-    ----------
-    alldata : neural data (trials x neuron x position)
-    leftchoices : trials in which the animal went left
-    rightchoices : trials in which the animal went right
-
-    Returns
-    -------
-    indices of left preferrring neurons, indices of right preferring neurons, 
-    and indices of neurons with no significant difference in response between
-    the two choices
-
-    '''
     avgdata = np.mean(alldata, axis=0) #neurons x position
     
     #transform data by substracting the minimum
@@ -219,30 +242,29 @@ NCellLChoice = np.zeros((1, 3301))
 NCellRChoice = np.zeros((1, 3301))
 
 
-alldata = np.load('MImodel.npy')
-lchoices = np.load('lchoices.npy')
-rchoices = np.load('rchoices.npy')
+alldata = np.load('MImodel.npy') #load simulated model data
+lchoices = np.load('lchoices.npy') #load left choices corresponding to simulation
+rchoices = np.load('rchoices.npy') #load right choices corresponding to simulation
 
-avgdata = np.mean(alldata[:, :, :], axis=0) #neurons x position
-
+#use original simulation to sort cells into right and left preferring
 leftis, rightis, splitis, nonis = divide_LR(alldata, lchoices, rchoices, pthresh, region_threshold, region_width, base_thresh)
-
 
 maxchanges = np.zeros((len(leftis), 2*neurons))
 
+#for each left preferring cell, simulate mdoel with excitation to that cell
 for i, l in enumerate(leftis):
     Lcues = np.array([500])
     Rcues = np.array([500])
     sol, optosol = simulate(Lcues, Rcues, l)
 
-    delta = optosol-sol
+    delta = optosol-sol #difference in activity with and without stimulation
     
-    increases = np.max(delta, axis=0)
-    decreases = np.min(delta, axis=0)
+    increases = np.max(delta, axis=0) #find maximum positive change
+    decreases = np.min(delta, axis=0) #find maximum negative change
     
     maxchanges[i] = increases+decreases
 
-
+#sort cells in sequence order and by choice preference
 leftdata = alldata[lchoices, :, :]
 rightdata = alldata[rchoices, :, :]
 
@@ -270,77 +292,19 @@ LCellRChoice = LCellRChoice[1:, :]
    
 newLis = np.argsort(np.argmax((LCellLChoice+LCellRChoice)/2, axis=1))
 
+#get the maximum change for each neuron in sequence order
 maxchanges = maxchanges[newLis, :]
 maxchangesleft = maxchanges[:, leftis]
 maxchangesright = maxchanges[:, rightis]
 maxchangessplit = maxchanges[:, splitis]
 
-
-#resort data so always in sequence order
-LCellLChoice = LCellLChoice[newLis, :]
-LCellRChoice = LCellRChoice[newLis, :]
-maxchangesleft = maxchangesleft[:, newLis]
-
-RCellLChoice = RCellLChoice[1:, :]
-RCellRChoice = RCellRChoice[1:, :]
-   
-newRis = np.argsort(np.argmax((RCellRChoice+RCellLChoice)/2, axis=1))
-
-#resort data so always in sequence order
-RCellLChoice = RCellLChoice[newRis, :]
-RCellRChoice = RCellRChoice[newRis, :]
-maxchangesright = maxchangesright[:, newRis]
-
-SCellLChoice = SCellLChoice[1:, :]
-SCellRChoice = SCellRChoice[1:, :]
-   
-newSis = np.argsort(np.argmax((SCellLChoice+SCellRChoice)/2, axis=1))
-
-#resort data so always in sequence order
-SCellLChoice = SCellLChoice[newSis, :]
-SCellRChoice = SCellRChoice[newSis, :]
-maxchangesplit = maxchangessplit[:, newSis]
-   
-
-#nonnormalized plots
-fig, ax = plt.subplots(1, 3,  gridspec_kw={'width_ratios': [len(newLis), len(newRis), len(newSis)]})
-
-ax[0].imshow(maxchangesleft, cmap = 'bwr', aspect='equal', vmin=-20, vmax=20)
-ax[0].set_xlabel('left cells')
-ax[0].set_ylabel('stimulated left cell')
-ax[0].set_xticks([])
-ax[0].set_yticks([])
-
-ax[1].imshow(maxchangesright, cmap = 'bwr', aspect='equal', vmin=-20, vmax=20)
-ax[1].set_xlabel('right cells')
-ax[1].set_xticks([])
-ax[1].set_yticks([])
-
-ax[2].imshow(maxchangessplit, cmap = 'bwr', aspect='equal', vmin=-20, vmax=20)
-ax[2].set_xlabel('non-pref. cells')
-ax[2].set_xticks([])
-#ax[2].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-#ax[2].set_xlabel('position (cm)')
-ax[2].set_yticks([])
-
-plt.savefig('Oct3MICompetingChainsOptoHeatmap.pdf', transparent= True)
-
+#for neuron 4, plot the difference in activity with and without stimulation
 leftresp = maxchangesleft[4, :]
 rightresp = maxchangesright[4, :]
 changes = np.concatenate((leftresp, rightresp))
 
-colors = []
-for c in changes:
-    if c<0:
-        colors.append('blue')
-    else:
-        colors.append('red')
-    
 plt.figure()
-#plt.axvspan(0, len(leftresp), color = 'red', alpha = .5)
-#plt.axvspan(len(leftresp), len(changes), color = 'blue', alpha = .5)
 plt.bar(np.arange(len(changes)), changes, color = 'k', align = 'edge', width=1)
-#plt.axvspan(4,5, facecolor='yellow', alpha=.4, edgecolor=None)
 plt.xlim([0, len(changes)])
 plt.ylim([-12, 22])
 plt.plot(np.arange(len(changes)), np.zeros(len(changes)), color = 'k', linestyle = '--')
@@ -349,4 +313,4 @@ plt.ylabel('change from baseline', fontsize=24)
 plt.xticks([len(leftresp)/2, len(leftresp)+len(rightresp)/2], labels = ['left neurons', 'right neurons'], fontsize=24)
 plt.xlabel('sorted by position', fontsize=24)
 plt.tight_layout()
-plt.savefig('NEWMIBarOptoChains.pdf', transparent=True)
+plt.show()
