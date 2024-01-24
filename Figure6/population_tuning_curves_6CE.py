@@ -172,16 +172,13 @@ DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
 files = os.listdir('./ACC')
 ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
 
-files = os.listdir('./V1')
-V1matfiles = [f for f in files if f.startswith('nic')]
-
 files = os.listdir('./RSC')
 RSCmatfiles = [f for f in files if f.startswith('nic')]
 
 files = os.listdir('./HPC')
 HPCmatfiles = [f for f in files if f.startswith('nic')]
 
-filelist = [ACCmatfiles, DMSmatfiles,  RSCmatfiles,  HPCmatfiles, V1matfiles]
+filelist = [ACCmatfiles, DMSmatfiles,  RSCmatfiles,  HPCmatfiles]
 
 #define range of mean firing rate plots
 vm = {'ACC':1.8, 'DMS': 1.9, 'HPC': 1.95, 'RSC': 1.55, 'V1':1.3}
