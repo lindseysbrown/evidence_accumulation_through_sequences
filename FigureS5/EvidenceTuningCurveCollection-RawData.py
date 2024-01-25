@@ -6,239 +6,126 @@ Created on Thu Mar  9 10:19:35 2023
 """
 
 import numpy as np
-from scipy.io import loadmat
-from sklearn import decomposition
-from sklearn.linear_model import LogisticRegression
-from sklearn.linear_model import LinearRegression
-from sklearn.metrics import roc_auc_score
 import matplotlib.pyplot as plt
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 from scipy import stats
-from scipy.stats import f_oneway, kurtosis, skew, sem, rankdata
-from scipy.optimize import curve_fit
-import diptest
+from scipy.stats import sem, rankdata
 import pandas as pd
-import matplotlib.gridspec as gs
 from sklearn.preprocessing import minmax_scale
-from scipy.signal import savgol_filter
-from scipy.interpolate import splrep, splev
 import pickle
 
-sigthresh = .05
-
+#dictionary of examples used in each maze region of Figure 5
 earlyexamples = {'ACC': (10, 'dFF_tetO_8_08022021_T10processedOutput'), 'DMS': (4, 'dFF_scott_d2_857_20190426processedOutput'), 'HPC': (50, 'nicFR_E39_20171103'), 'RSC': (3,'nicFR_k50_20160811_RSM_400um_114mW_zoom2p2processedFR'), 'V1':(8,'nicFR_k56_20161004')}
-
 lateexamples = {'ACC': (153, 'dFF_tetO_8_07282021_T10processedOutput'), 'DMS':(7, 'dFF_scott_a2a_64_11072019processedOutput'), 'HPC':(25, 'nicFR_E43_20170802'), 'RSC': (44,'nicFR_k31_20160114_RSM2_350um_98mW_zoom2p2processedFR'), 'V1':(14,'nicFR_k53_20161205')}
-
 delayexamples = {'ACC': (17, 'dFF_tetO_8_08052021_T11processedOutput'), 'DMS':(1,'dFF_scott_d1_67_20190418processedOutput'), 'HPC':(118, 'nicFR_E22_20170227'), 'RSC': (10, 'nicFR_k42_20160512_RSM_150um_65mW_zoom2p2processedFR'), 'V1':(35,'nicFR_k53_20161205')}                     
 
-
-specialcolors = {0:'magenta', 1: 'cyan', 2: 'orange'}
-
-
-def gauss(x, mu, sig):
-    return np.exp((-(x-mu)**2)/(2*sig**2))
-
-def logistic(x, k, x0):
-    return 1/(1+np.exp(-k*(x-x0)))
-
-def movingaverage(interval, window_size):
-    window = np.ones(int(window_size))/float(window_size)
-    return np.convolve(interval, window, 'same')
-
-def get_obs(data, evs, poses):
-    frs = data[:, 0]
-    data = data[~np.isnan(frs), :]
-    frs = data[:, 0]
-    pos = data[:, 1].reshape(-1, 1)
-    ev = data[:, 2].reshape(-1, 1)
-    frs = minmax_scale(frs)
-   
-    obs = np.zeros((len(evs), len(poses)))
-    sems = np.zeros((len(evs), len(poses)))
-    for i, e in enumerate(evs):
-        for j, p in enumerate(poses):
-            vp = pos[:, 0]==p
-            ve = ev[:, 0]==e
-            os = vp & ve
-            if sum(os)>0:
-                obs[i][j] = np.mean(frs[os])
-                sems[i][j] = sem(frs[os])
-            else:
-                obs[i][j] = np.nan
-                sems[i][j] = np.nan  
-    return obs, sems
-
 def get_crosssection(data, mup, poses, sigp):
-    frs = data[:, 0]
-    data = data[~np.isnan(frs), :]
-    frs = data[:, 0]
-    pos = data[:, 1].reshape(-1, 1)
-    ev = data[:, 2].reshape(-1, 1)
-    #frs = minmax_scale(frs)
-    
-    p = poses[np.argmin(np.abs(poses-mup))]
-    #validps = np.where(pos==p)[0]
-    validps = np.where((np.abs(pos-mup)<.5*sigp) & (pos>0))[0]
-    compps = np.where((np.abs(pos-mup)<.5*sigp))[0]
-    if len(compps)>len(validps):
-        print('cell had precue values')
-    #if sigp>20:
-     #   validps = np.where(np.abs(pos-mup)<.5*sigp)[0]
-    #else:
-     #   validps = np.concatenate((np.where(pos==p)[0], np.where(pos==p+5)[0], np.where(pos==p-5)[0]))
+    '''
+    function to return raw averaged firing rate at each evidence level during a cell's active position
 
-    #frs = minmax_scale(frs[validps])
-    
+    ===inputs===
+    data: array of data with firing rates (1st column), positions (2nd column), and cumulative evidence (3rd column)
+    mup: fit position mean of the neuron
+    poses: array of position bins
+    sigp: fit position standard deviation of the neurons
+
+    ===outputs===
+    evrange: range of observed evidence levels at the active position
+    crosssection: average firing rate at each evidence level in evrange
+    '''
+    #read in neural data
+    frs = data[:, 0] #firing rates, 1st column
+    data = data[~np.isnan(frs), :] #remove nan firing rates
+    frs = data[:, 0]
+    pos = data[:, 1].reshape(-1, 1) #positions, 2nd column
+    ev = data[:, 2].reshape(-1, 1) #cumulative evidence, 3rd column
+
+    validps = np.where((np.abs(pos-mup)<.5*sigp) & (pos>0))[0] #identify active positions, defined as positions within .5 fit position standard deviations of the fit position means, only consider firing during the cue period
+
+    #restrict to the active position
     frs = frs[validps]
     evs = ev[validps]
     
-    '''
-    evs = evs.flatten()
-    sortis = np.argsort(evs)
-    frs = frs[sortis]
-    evs = evs[sortis]
-    
-    spline = splrep(evs, frs, s=1500)
-    
-    evrange = np.sort(list(set(evs.flatten())))
-    evrange = evrange[np.abs(evrange)<11]
-    
-    crosssection = splev(evrange, spline)
-    
-    '''
-  
-    '''
-    evrange = np.sort(list(set(evs.flatten())))
-    evrange = evrange[np.abs(evrange)<11]
-    p = np.polyfit(evs.flatten(), frs, 9)
-    f = np.poly1d(p)
-    crosssection = f(evrange)
-    '''
-    
-    
+    #set of valid positions
     uniqpos = set(pos[validps].flatten())
 
-    evrange = np.sort(list(set(evs.flatten())))
-    evrange = evrange[np.abs(evrange)<11]
-    crosssection = np.zeros(len(evrange))
+    evrange = np.sort(list(set(evs.flatten()))) #get unique evidence levels
+    evrange = evrange[np.abs(evrange)<11] #only consider evidence in range [-10, 10]
+    
+    #find the average firing rate at each evidence level in evrange
+    crosssection = np.zeros(len(evrange)) 
     for i, e in enumerate(evrange):
-        if sum(evs.flatten()==e) > len(uniqpos):    
-            crosssection[i] = np.mean(frs[evs.flatten()==e])
+        if sum(evs.flatten()==e) > len(uniqpos):  #require that the evidence level is sampled on more than one trial  
+            crosssection[i] = np.mean(frs[evs.flatten()==e]) #take average at each evdiecne level
         else:
             crosssection[i] = np.nan
+
+    #remove any undersampled evidence values
     evrange = evrange[~np.isnan(crosssection)]
     crosssection = crosssection[~np.isnan(crosssection)]
-    
-    
-    #crosssection = movingaverage(crosssection, 2)
-    
+
     return evrange, crosssection   
+ 
 
-
-def get_preds(data, mu_p, sig_p, mu_e, sig_e, evs, poses):
-    frs = data[:, 0]
-    data = data[~np.isnan(frs), :]
-    frs = data[:, 0]
-    pos = data[:, 1].reshape(-1, 1)
-    ev = data[:, 2].reshape(-1, 1)
-    frs = minmax_scale(frs)
-    P = gauss(pos, mu_p, sig_p)
-    E = gauss(ev, mu_e, sig_e)
-    X = P*E
-    lr = LinearRegression()
-    lr.fit(X[~np.isnan(frs)], frs[~np.isnan(frs)])
-    a = lr.coef_
-    b = lr.intercept_
-    preds = np.zeros((len(evs), len(poses)))
-    for i, e in enumerate(evs):
-        for j, p in enumerate(poses):
-            preds[i][j] = a*gauss(e, mu_e, sig_e)*gauss(p, mu_p, sig_p)+b
-    return preds
-
-def get_preds_logistic(data, mu_p, sig_p, k, x0, evs, poses):
-    frs = data[:, 0]
-    data = data[~np.isnan(frs), :]
-    frs = data[:, 0]
-    pos = data[:, 1].reshape(-1, 1)
-    ev = data[:, 2].reshape(-1, 1)
-    frs = minmax_scale(frs)
-    P = gauss(pos, mu_p, sig_p)
-    E = logistic(ev, k, x0)
-    X = P*E
-    lr = LinearRegression()
-    lr.fit(X[~np.isnan(frs)], frs[~np.isnan(frs)])
-    a = lr.coef_
-    b = lr.intercept_
-    preds = np.zeros((len(evs), len(poses)))
-    for i, e in enumerate(evs):
-        for j, p in enumerate(poses):
-            preds[i][j] = a*gauss(p, mu_p, sig_p)*logistic(e, k, x0)+b
-    return preds   
-
-regions = ['ACC', 'DMS', 'HPC', 'RSC', 'V1']
-
-individual_plots = False
+regions = ['ACC', 'DMS', 'HPC', 'RSC']
 
 for region in regions:
-    with open(region+"-nonoutliercells.p", "rb") as fp:   #Pickling
+    #open a list of cells that have been verified to meet non-outlier criteria (e.g. for cells with evidence SD<3, there is not exactly one outlier in the bin containing the mean evidence and mean position)
+    with open(region+"-nonoutliercells.p", "rb") as fp:   
         nstoplot = pickle.load(fp)
     
-    
+    #evidence bins
     evs = np.arange(-15, 16)
     
+    #get position bins corresponding to region
     if region in ['ACC', 'DMS']:
         poses = np.arange(-27.5, 302.5, 5)
     else:
         poses = np.arange(-30, 300, 5)
     
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams-evonly-Cueonly.csv')
+    #load results of fitting logistic and gaussian to just the region around the peak
+    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams-evonly.csv')
     
+    #only keep cells that meet non-outlier criteria
     keep = np.zeros(len(fitparams))
     for i in range(len(fitparams)):
         n = (fitparams['Neuron'].values[i], fitparams['Session'].values[i])
         if n in nstoplot:
-            keep[i] = 1
-            
+            keep[i] = 1      
     fitparams['Keep'] = keep
-    
     fitparams = fitparams[fitparams['Keep']>0]
     
-    fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams-boundedmue-NEW.csv')
+    #load parameters from the joint fitting
+    fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
 
+    #only keep cells that meet non-outlier criteria
     keep = np.zeros(len(fitparamsgauss))
     for i in range(len(fitparamsgauss)):
         n = (fitparamsgauss['Neuron'].values[i], fitparamsgauss['Session'].values[i])
         if n in nstoplot:
-            keep[i] = 1
-            
+            keep[i] = 1     
     fitparamsgauss['Keep'] = keep
-    
     fitparamsgauss = fitparamsgauss[fitparamsgauss['Keep']>0]
     
     
-    fitlog = fitparams['rlog'].values
-    fitgauss = fitparams['rgauss'].values
+    fitlog = fitparams['rlog'].values #correlations of local logistic fit
+    fitgauss = fitparams['rgauss'].values #correlations of local gaussian fit
     
-    siglog = fitparams['siglog'].values<.05
-    siggauss = fitparams['siggauss'].values<.05
+    siglog = fitparams['siglog'].values<.05 #whether local logistic fit was significant compared to pseudosession
+    siggauss = fitparams['siggauss'].values<.05 #whether local gaussian fit was significant compared to pseudosession
     
-    mups = [float(m.replace('[','').replace(']', '')) for m in fitparams['Mup']]
+    mups = [float(m.replace('[','').replace(']', '')) for m in fitparams['Mup']] #update so mean position is a float and not a string
     sigps = fitparams['Sigp'].values
         
-
+    #get parameters for joint fit
     mues = fitparams['Mue'].values
     siges = fitparams['Sige'].values
     
     ns = fitparams['Neuron'].values
     ss = fitparams['Session'].values
-
-    
-    x0s = fitparams['x0'].values
-    ks = fitparams['k'].values
 
     Mes = fitparams['MaxEMean'].values
     mes = fitparams['MinEMean'].values
@@ -250,27 +137,20 @@ for region in regions:
     fitgausscomp = fitgauss.copy()
     fitgausscomp[siggauss<1] = 0
     
+    bestfits = np.argsort(np.nanmax(np.vstack((fitlogcomp, fitgausscomp)), axis=0))[::-1] #sort in descending order of best fit of gauss or logistic, to get same cells as Fig. 5
+    
+    numcurves = {'ACC':15, 'DMS':15, 'HPC':15, 'RSC':15}  #number of curves to plot for each brain region
 
-    
-    #bestfits = np.argsort(fitparamsgauss['Correlation'].values)[::-1]
-    bestfits = np.argsort(np.nanmax(np.vstack((fitlogcomp, fitgausscomp)), axis=0))[::-1]
-    
-    #delay
-    print('delay')
+    #delay region of the maze
     totalplots = 0
-    
-    numcurves = {'ACC':15, 'DMS':15, 'HPC':15, 'RSC':15, 'V1':15}
-        
     toplotx = []
     toploty = []
     toplotmues = []
     toplotcolor = []
-    
-    bests = []
-    
+        
     plt.figure()
-    for i in bestfits:
-        if (totalplots < numcurves[region]) and (mups[i]>200):
+    for i in bestfits: #iterate over ordered list of fits, same as in Figure 5
+        if (totalplots < numcurves[region]) and (mups[i]>200): #only plot if the cell in delay region for maximum of numcurves
             n = fitparams['Neuron'].iloc[i]
             s = fitparams['Session'].iloc[i]
             
@@ -278,86 +158,65 @@ for region in regions:
             sigp = sigps[i]
             mue = mues[i]
             
-            try:
-                ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
-            except:
-                ndata = np.load(region+'/firingdata-split/'+s+'neuron'+str(n)+'.npy')
-                
-            evrange, crosssection = get_crosssection(ndata, mup, poses, sigp)
+            ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy') #load corresponding neural data
+            evrange, crosssection = get_crosssection(ndata, mup, poses, sigp) #get average evidence tuning
             
             if len(evrange)>2:
-                if mue<0:
+                if mue<0: #test if right or left preferring
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
-                    toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
-                    toplotcolor.append('r')
+                    toploty.append(minmax_scale(crosssection)) #put all cross sections on the same scale
+                    toplotcolor.append('r') #right preferring, red
                     toplotmues.append(mue)
                 else:
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
                     toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
-                    toplotcolor.append('b')
+                    toplotcolor.append('b') #left preferring, blue
                     toplotmues.append(mue)  
                 
                 totalplots = totalplots+1
-
-                    
-        #if (s, n) in exampleneurons[region]:
-         #   toplotcolor[-1] = specialcolors[exampleneurons[region].index((s,n))]
-    
+    #get curve for the corresponding example in that region 
     exampleplotneuron = delayexamples[region]
     n = exampleplotneuron[0]
     s = exampleplotneuron[1]
-    params = fitparams[(fitparams.Neuron==exampleplotneuron[0]) & (fitparams.Session==exampleplotneuron[1])].iloc[0]
-    try:
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
-    except:
-        ndata = np.load(region+'/firingdata-split/'+s+'neuron'+str(n)+'.npy')
-   
-    evrange, crosssection = get_crosssection(ndata, float(params['Mup']), poses, params['Sigp'])
+    params = fitparams[(fitparams.Neuron==exampleplotneuron[0]) & (fitparams.Session==exampleplotneuron[1])].iloc[0] #parameters for specific neuron
+    ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
+    evrange, crosssection = get_crosssection(ndata, float(params['Mup']), poses, params['Sigp']) #get average evidence tuning curve at active posiiton
     mue = params['Mue']
     examplex = -1*evrange
     exampley = minmax_scale(crosssection)
-    if mue<0:
+    if mue<0: #color according to choice preference
         examplecolor = 'r'
     else:
         examplecolor = 'b'        
     
-    
+    #get varied opacity of lines based on magnitude of left or right evidence tuning
     ranks = np.array(toplotmues)
     starts = [np.nanargmax(y) for y in toploty]
     ranks[np.array(toplotcolor)=='b'] = rankdata(np.array(toplotmues)[np.array(toplotcolor)=='b'])/sum(np.array(toplotcolor)=='b')
     ranks[np.array(toplotcolor)=='r'] = rankdata(-1*np.array(toplotmues)[np.array(toplotcolor)=='r'])/sum(np.array(toplotcolor)=='r')    
     
+    #plot figure with example tuing curves
     plt.figure()
-    for x,y,c,r in zip(toplotx, toploty, toplotcolor, ranks):
+    for x,y,c,r in zip(toplotx, toploty, toplotcolor, ranks): #plot each fit curve with correct color and opacity
         if c == 'r' or c=='b':
             plt.plot(x,y, color = c, alpha = r, linewidth = 1)
         else:
             plt.plot(x,y, color = c, linewidth = 3)    
-    plt.plot(examplex, exampley, color = 'k', linewidth = 5)    
+    plt.plot(examplex, exampley, color = 'k', linewidth = 5)  #plot example curve thicker  
     plt.title(region+' Delay')
     plt.xlim([-10, 10])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'delay-raw.pdf')    
+    plt.show()
     
     
-    #late cue
-    print('late')
+    #repeat for late cue
     totalplots = 0
-    
-    numcurves = {'ACC':15, 'DMS':15, 'HPC':15, 'RSC':15, 'V1':15}
-        
     toplotx = []
     toploty = []
     toplotmues = []
     toplotcolor = []
-    
-    bests = []
-    
+        
     plt.figure()
     for i in bestfits:
         if (totalplots < numcurves[region]) and (mups[i]>100) and (mups[i]<200):
@@ -378,33 +237,22 @@ for region in regions:
             if len(evrange)>2:
                 if mue<0:
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
                     toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
                     toplotcolor.append('r')
                     toplotmues.append(mue)
                 else:
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
                     toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
                     toplotcolor.append('b')
                     toplotmues.append(mue)  
                 
                 totalplots = totalplots+1
 
-                    
-        #if (s, n) in exampleneurons[region]:
-         #   toplotcolor[-1] = specialcolors[exampleneurons[region].index((s,n))]
-    
     exampleplotneuron = lateexamples[region]
     params = fitparams[(fitparams.Neuron==exampleplotneuron[0]) & (fitparams.Session==exampleplotneuron[1])].iloc[0]
     n = exampleplotneuron[0]
     s = exampleplotneuron[1]    
-    try:
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
-    except:
-        ndata = np.load(region+'/firingdata-split/'+s+'neuron'+str(n)+'.npy')
+    ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
    
     evrange, crosssection = get_crosssection(ndata, float(params['Mup']), poses, params['Sigp'])
     mue = params['Mue']
@@ -432,22 +280,16 @@ for region in regions:
     plt.xlim([-10, 10])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'late-raw.pdf')        
+    plt.show()      
     
     
     
-    #early cue
-    print('early')
-    totalplots = 0
-    
-    numcurves = {'ACC':15, 'DMS':15, 'HPC':15, 'RSC':15, 'V1':15}
-        
+    #repeat for early cue
+    totalplots = 0        
     toplotx = []
     toploty = []
     toplotmues = []
     toplotcolor = []
-    
-    bests = []
     
     plt.figure()
     for i in bestfits:
@@ -459,44 +301,28 @@ for region in regions:
             sigp = sigps[i]
             mue = mues[i]
             
-            try:
-                ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
-            except:
-                ndata = np.load(region+'/firingdata-split/'+s+'neuron'+str(n)+'.npy')
-                
+            ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
             evrange, crosssection = get_crosssection(ndata, mup, poses, sigp)
             
             if len(evrange)>2:
                 if mue<0:
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
                     toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
                     toplotcolor.append('r')
                     toplotmues.append(mue)
                 else:
                     toplotx.append(-1*evrange)
-                    #toploty.append(crosssection)
                     toploty.append(minmax_scale(crosssection))
-                    #toploty.append(minmax_scale(savgol_filter(crosssection, 3, 2)))
                     toplotcolor.append('b')
                     toplotmues.append(mue)  
                 
                 totalplots = totalplots+1
-
-                    
-        #if (s, n) in exampleneurons[region]:
-         #   toplotcolor[-1] = specialcolors[exampleneurons[region].index((s,n))]
     
     exampleplotneuron = earlyexamples[region]
     n = exampleplotneuron[0]
     s = exampleplotneuron[1]
     params = fitparams[(fitparams.Neuron==exampleplotneuron[0]) & (fitparams.Session==exampleplotneuron[1])].iloc[0]
-    try:
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
-    except:
-        ndata = np.load(region+'/firingdata-split/'+s+'neuron'+str(n)+'.npy')
-   
+    ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
     evrange, crosssection = get_crosssection(ndata, float(params['Mup']), poses, params['Sigp'])
     mue = params['Mue']
     examplex = -1*evrange
@@ -523,4 +349,4 @@ for region in regions:
     plt.xlim([-6, 6])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'early-raw-updatedrange.pdf')
+    plt.show()

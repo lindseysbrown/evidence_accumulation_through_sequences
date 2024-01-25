@@ -204,7 +204,7 @@ for region in regions:
     plt.xlim([-10, 10])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'delay-fit.pdf')
+    plt.show()
 
     #repeat for late cue
     totalplots = 0
@@ -301,7 +301,7 @@ for region in regions:
     plt.xlim([-10, 10])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'late-fit.pdf')
+    plt.show()
 
     #repeat for early cue
     totalplots = 0
@@ -397,4 +397,4 @@ for region in regions:
     plt.xlim([-6, 6])
     plt.xlabel('Evidence')
     plt.ylabel('Activity')
-    plt.savefig('Figure4Plots/TuningCurves/'+region+'early-fit-updatedrange.pdf')
+    plt.show()
