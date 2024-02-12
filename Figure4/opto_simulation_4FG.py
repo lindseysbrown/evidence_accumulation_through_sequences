@@ -27,10 +27,11 @@ Cring = np.zeros((neurons*timepoints,))
 #set up parameters
 P0 = 20 #postion width
 T = 300 #threshold
+X = 0.04 #external input
 a = 1.1 #decay rate
 b = 0.088 #feedforward synaptic connections
 w0 = 0.12 #parameterization of within layer cosine connectivity
-w1 = -0.9 #parameterization of within layer cosine connectivity
+w1 = -1 #parameterization of within layer cosine connectivity
 optostrength = .2 #strength of optogenetic excitation
 
 #activation function
@@ -61,7 +62,7 @@ feedforward[i==j+neurons] = b
 def P(t):
     P = np.zeros(neurons*timepoints)
     i = int(np.floor(t/P0))
-    P[neurons*i:neurons*(i+1)]=T #assign all neurons at position layer to threshold level
+    P[neurons*i:neurons*(i+1)]=T+X #assign all neurons at position layer to threshold level
     return P
 
 #external input function
@@ -128,11 +129,11 @@ def simulate(Lcues, Rcues, optoi, input_noise = False, Inoise = .67):
     
 
     def ring(y, t):
-        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+5*I(t, y, Lcues, Rcues))) #differential equation without optogenetic excitation
+        dydt = -a*y+(F(W@y+feedforward@y+.2*I(t, y, Lcues, Rcues)+P(t)-T)) #differential equation without optogenetic excitation
         return dydt
     
     def optoring(y, t):
-        dydt = -a*y+np.heaviside(P(t)-T, 1)*(F(W@y+feedforward@y+I(t, y, Lcues, Rcues)+O(t, optoi))) #modified differential equation with optogenetic excitation
+        dydt = -a*y+(F(W@y+feedforward@y+.2*I(t, y, Lcues, Rcues)+O(t, optoi)+P(t)-T)) #modified differential equation with optogenetic excitation
         return dydt
     
     y0 = Cring
