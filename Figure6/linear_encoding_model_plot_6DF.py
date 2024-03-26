@@ -17,7 +17,13 @@ import pandas as pd
 import pickle
 from scipy.stats import f, sem
 
-regions = ['ACC', 'DMS', 'HPC', 'RSC']
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
+if not demo:
+    regions = ['ACC', 'DMS', 'HPC', 'RSC']
+else:
+    regions = ['ACC']
 
 percentevsig = {}
 
@@ -27,13 +33,18 @@ poses = np.arange(-30, 300, 5)
 #parameters
 #0: beta_ev, 1:beta_choice, 2:beta_i, 3:F_ev, 4:F_choice, 5: p_ev
 
-with open('numcorrecttrials.pkl', 'rb') as handle:
+with open('ExampleData/numcorrecttrials.pkl', 'rb') as handle:
     numcorrecttrials = pickle.load(handle) #dictionary of number of correct trials in each session
 
 plt.figure()
 for region in regions:
-    fitparams = np.load(region+'/paramfit/'+region+'allfitparams-linearencoding-signedevidence.npy') #load saved parameters from running encoding model
-    fitneurondata = pd.read_csv(region+'/paramfit/'+region+'allfitparams-linearencoding-neuroninfo-signedevidence.csv') #load neuron, session information corresponding to parameters
+    if not demo:
+        fitparams = np.load(region+'/paramfit/'+region+'allfitparams-linearencoding-signedevidence.npy') #load saved parameters from running encoding model
+        fitneurondata = pd.read_csv(region+'/paramfit/'+region+'allfitparams-linearencoding-neuroninfo-signedevidence.csv') #load neuron, session information corresponding to parameters
+
+    else:
+        fitparams = np.load('ExampleData/ACClinearencoding.npy')
+        fitneurondata = pd.read_csv('ExampleData/ACClinearencoding-neuroninfo.csv')
     
     #initialize zero matrix for each neuron of F-statistic needed for it to be significant
     sigF = np.zeros(len(fitneurondata))
@@ -53,7 +64,10 @@ for region in regions:
     #normalized by position tuning of cells
     mups = []
     sigps = []
-    fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load fit joint gaussian parameters
+    if not demo:
+        fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load fit joint gaussian parameters
+    else:
+        fitparamsgauss = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     for s, n in zip(fitneurondata['Session'].values, fitneurondata['Index'].values): #for each neuron find position parameters
         try:
             mups.append(fitparamsgauss['Mup'][(fitparamsgauss.Neuron==n) & (fitparamsgauss.Session==s)].iloc[0])

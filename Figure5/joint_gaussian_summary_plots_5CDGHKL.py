@@ -18,6 +18,9 @@ from scipy.stats import sem
 from sklearn.preprocessing import minmax_scale
 import pickle
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
 percentagefit = True #whether to use only top 80% of neurons for the plot
 checkobs = True #whether to check for the number of observations for narrowly tuned cells
 checkvar = True #whether to perform additional checks beyond count for narrowly tuned cells
@@ -64,7 +67,10 @@ def get_obs(data, evs, poses, mue, mup):
 
     return sum(os), np.mean(frs[os]), sem(frs[os]) #number of obs is the total meeting the criteria, mean in bin, standard error in bin
     
-regions = ['ACC', 'DMS', 'HPC', 'RSC']
+if not demo:
+    regions = ['ACC', 'DMS', 'HPC', 'RSC']
+else:
+    regions = ['ACC']
 
 for region in regions:
 
@@ -78,7 +84,10 @@ for region in regions:
         poses = np.arange(-30, 300, 5)    
     
     #load parameters from joint gaussian fit
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     
     #use fit pvalues to determine which fits were significant and consider only those cells
     pvals = fitparams['Pval'].values
@@ -134,7 +143,7 @@ for region in regions:
         mues[i] = params['Mue'] #fit evidence mean
         siges[i] = params['Sige'] #fit evidence standard deviations
         
-        if params['Sige']<3: #for narrowly tuned cells
+        if params['Sige']<3 and not demo: #for narrowly tuned cells
             #get gaussian fit data
             ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
             
@@ -212,10 +221,7 @@ for region in regions:
     plt.xlim([-50, 350])
     plt.ylabel('density')
     plt.title(region + r' $\mu_p$')
-    if outliervar:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'mup-outlier-mean.pdf')
-    else:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'mup-lowsem.pdf')
+    plt.show()
  
     #histogram of fit position standard deviation
     plt.figure()
@@ -223,10 +229,7 @@ for region in regions:
     plt.xlim([0, 200])
     plt.ylabel('density')
     plt.title(region + r' $\sigma_p$')
-    if outliervar:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'sigp-outlier-mean.pdf')
-    else:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'sigp-lowsem.pdf')        
+    plt.show()
 
     #histogram of normalized fit evidence means
     plt.figure()
@@ -238,10 +241,7 @@ for region in regions:
     plt.title(region + r' $\mu_e$')
     plt.axvline(-1, color = 'k', linestyle = '--')
     plt.axvline(1, color = 'k', linestyle = '--')
-    if outliervar:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'mue-outlier-mean.pdf')
-    else:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'mue-lowsem.pdf') 
+    plt.show()
 
     #histogram of normalized fit evidence standard deviations
     plt.figure()
@@ -251,10 +251,7 @@ for region in regions:
     plt.title(region + r' $\sigma_e$')
     plt.axvline(1, color = 'k', linestyle = '--')
     plt.ylim([0, 5])
-    if outliervar:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'sige-outlier-mean.pdf')
-    else:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'sige-lowsem.pdf')    
+    plt.show()
  
     #scatter plot of fit position means by fit evidence means, colored by normalized fit evidence standard deviation
     fig = plt.figure()
@@ -270,10 +267,7 @@ for region in regions:
     plt.axvline(200, color = 'gray', linestyle='--', linewidth=1)
     fig.colorbar(im)
     plt.title(region)
-    if outliervar:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'scatter-outlier-mean.pdf')
-    else:
-        plt.savefig('Figure4Plots/RestrictedGaussPlots/'+region+'scatter-lowsem.pdf')
+    plt.show()
 
 
     

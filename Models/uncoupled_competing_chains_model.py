@@ -150,7 +150,7 @@ perf = [np.mean(psychometric[c]) for c in cuediffs]
 alldata = alldata[:, :, 1:]
 
 #save all data for use in future analysis
-np.save('uncoupledchainsmodel.npy', alldata)
+np.save('uncoupledchainsModel.npy', alldata)
 
 #code for getting sequence plots, based on method from Koay et al. (equivalent to left vs. right chains in model but more general for neural data)
 pthresh = .1

@@ -12,6 +12,9 @@ from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_squared_error
 import sys
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
 def modelfit(frs, ev, choices):
     '''
     fit a linear model to predict firing rates (frs) from cumulative evidences (ev) and signed evidence(ie, current best choice; choices)
@@ -52,7 +55,10 @@ arguments = sys.argv[1:]
 infile = arguments[0]
 infile = infile.split('.')[0]+'.npy'
 
-neuron = int(infile.split('neuron')[1].split('.')[0])
+if not demo:
+    neuron = int(infile.split('neuron')[1].split('.')[0])
+else:
+    neuron = 153
 
 sigma=.1
 
@@ -88,8 +94,11 @@ for i, p in enumerate(poses): #iterate over all positions
         stat = stats.ttest_1samp(Fs_comp, F_ev)
         params[i, :] = [beta_ev, beta_choice, beta_i, F_ev, F_choice, stat.pvalue] #test if correlation is significantly better than 0
 
-region, fdata, neuron = infile.split('/')    
-np.save(region+'/paramfit-linearencoding/'+neuron, params) #save results for future analysis
+if not demo:
+    region, fdata, neuron = infile.split('/')    
+    np.save(region+'/paramfit-linearencoding/'+neuron, params) #save results for future analysis
+else:
+    print(params)
 
 
 

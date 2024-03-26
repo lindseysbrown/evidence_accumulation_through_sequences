@@ -13,6 +13,9 @@ from sklearn.preprocessing import minmax_scale
 import sys
 import matplotlib.pyplot as plt
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
 #bounds on position parameters
 blp = [-50, 0, 0, 0] #lower bounds
 bup = [350, 200, 10, 1] #upper bounds
@@ -153,7 +156,10 @@ infile = arguments[0]
 infile = infile.split('.')[0]
 
 # preprocessing to remove nandata
-data = np.load(infile) #load array of firing rates (1st column), positions (2nd column), and cumulative evidence (3rd column)
+if not demo:
+    data = np.load(infile) #load array of firing rates (1st column), positions (2nd column), and cumulative evidence (3rd column)
+else:
+    data = np.load('ExampleData/exampleneuron.npy')
 frs = data[:, 0]
 data = data[~np.isnan(frs), :] #remove data where firing rate is nan
 frs = data[:, 0]
@@ -220,7 +226,7 @@ while iters<25: #iteratively fit postion and evidence parameters for 25 iteratio
     r, p = stats.pearsonr(preds.reshape(-1), frs) #correlation between predicted and true firing rates
 
 rs_pear = np.zeros(50)
-evsets = np.load('evidencegenerated.npy') #load generated evidence for pseudosessions
+evsets = np.load('ExampleData/evidencegenerated.npy') #load generated evidence for pseudosessions
 
 for i in range(50): 
     evgen = evsets[i, :len(frs)]
@@ -234,9 +240,12 @@ else:
     stat = stats.ttest_1samp(rs_pear, r)
     paramnew = np.concatenate((paramnew, np.array([r, stat.pvalue]))) #determine significance by t-test
 
+if not demo:
+    region, fdata, neuron = infile.split('/')    
+    np.save(region+'/paramfit/'+neuron, paramnew) #save parameters for use in further analysis
 
-region, fdata, neuron = infile.split('/')    
-np.save(region+'/paramfit/'+neuron, paramnew) #save parameters for use in further analysis
+else:
+    print(paramnew)
 
 
 

@@ -16,6 +16,8 @@ import pandas as pd
 from sklearn.preprocessing import minmax_scale
 import pickle
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
 
 def plot_ndata(data, evs, poses, mue, mup, sigp, n, s, r, maze, idx):
     '''
@@ -78,7 +80,7 @@ def plot_ndata(data, evs, poses, mue, mup, sigp, n, s, r, maze, idx):
 
     #title and save out neuron raw firing rates     
     plt.suptitle('Neuron '+str(n)+' r='+str(np.round(r,3)))
-    plt.savefig('ExamplesCriteria/'+'red'+region+maze+str(idx)+s+'neuron'+str(n)+'.pdf')
+    plt.show()
     
 
 #set colormap with nan set to gray
@@ -90,7 +92,10 @@ evs = np.arange(-15, 16)
 
 
 #load criteria cells
-regions = ['ACC', 'HPC', 'DMS', 'RSC']
+if not demo:
+    regions = ['ACC', 'HPC', 'DMS', 'RSC']
+else:
+    regions = ['ACC']
 
 for region in regions:
     #define position bins corresponding to region
@@ -100,11 +105,18 @@ for region in regions:
         poses = np.arange(-30, 300, 5) 
     
     #open a list of cells that have been verified to meet non-outlier criteria (e.g. for cells with evidence SD<3, there is not exactly one outlier in the bin containing the mean evidence and mean position)
-    with open(region+"-nonoutliercells.p", "rb") as fp:
-        nstoplot = pickle.load(fp)
+    if not demo:
+        with open(region+"-nonoutliercells.p", "rb") as fp:
+            nstoplot = pickle.load(fp)
+    else:
+        with open('ExampleData/'+region+"-nonoutliercells.p", "rb") as fp:
+            nstoplot = pickle.load(fp)        
     
     #load file containing results of parameter fitting
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
 
     #only keep cells that meet non-outlier criteria
     keep = np.zeros(len(fitparams))
@@ -115,54 +127,63 @@ for region in regions:
     fitparams['Keep'] = keep
     fitparams = fitparams[fitparams['Keep']>0]
 
-    #early cue
-    print('early')
-    earlycells = fitparams[(fitparams['Mup']>0) & (fitparams['Mup']<100)] #cells whose mean position falls in the early cue region
-    corrs = earlycells['Correlation'].values
-    idxs = np.argsort(corrs)[::-1] #plot cells in order of decreasing correlation of fit
-    idxs = idxs[:min(50, len(idxs))] #plot only as many as 50 examples
-    for num,i in enumerate(idxs):
-        print(num)
-        params = earlycells.iloc[i]
-        #determine which neuron is being plotted
-        n = params['Neuron'] 
-        s = params['Session']
+    if not demo:
+        #early cue
+        print('early')
+        earlycells = fitparams[(fitparams['Mup']>0) & (fitparams['Mup']<100)] #cells whose mean position falls in the early cue region
+        corrs = earlycells['Correlation'].values
+        idxs = np.argsort(corrs)[::-1] #plot cells in order of decreasing correlation of fit
+        idxs = idxs[:min(50, len(idxs))] #plot only as many as 50 examples
+        for num,i in enumerate(idxs):
+            print(num)
+            params = earlycells.iloc[i]
+            #determine which neuron is being plotted
+            n = params['Neuron'] 
+            s = params['Session']
 
-        #load the corresponding data, consisting of an array of firing rate, position, and evidence values
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
+            #load the corresponding data, consisting of an array of firing rate, position, and evidence values
+            ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')
 
-        #generate plot of the neural data
-        plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'early', num)     
-    
+            #generate plot of the neural data
+            plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'early', num)     
+        
 
-    #late cue, repeat for cells with mean position in the late cue region
-    print('late')
-    latecells = fitparams[(fitparams['Mup']>100) & (fitparams['Mup']<200)]
-    corrs = latecells['Correlation'].values
-    idxs = np.argsort(corrs)[::-1]
-    idxs = idxs[:min(50, len(idxs))]
-    for num,i in enumerate(idxs):
-        print(num)
-        params = latecells.iloc[i]
-        n = params['Neuron']
-        s = params['Session']
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')           
-        plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'late', num)        
-    
-    
-    #delay, repeat for cells with mean position in the delay region
-    print('delay')
-    delaycells = fitparams[fitparams['Mup']>200]
-    corrs = delaycells['Correlation'].values
-    idxs = np.argsort(corrs)[::-1]
-    idxs = idxs[:min(50, len(idxs))]
-    for num,i in enumerate(idxs):
-        print(num)
-        params = delaycells.iloc[i]
-        n = params['Neuron']
-        s = params['Session']
-        ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')           
-        plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'delay', num)
+            #late cue, repeat for cells with mean position in the late cue region
+            print('late')
+            latecells = fitparams[(fitparams['Mup']>100) & (fitparams['Mup']<200)]
+            corrs = latecells['Correlation'].values
+            idxs = np.argsort(corrs)[::-1]
+            idxs = idxs[:min(50, len(idxs))]
+            for num,i in enumerate(idxs):
+                print(num)
+                params = latecells.iloc[i]
+                n = params['Neuron']
+                s = params['Session']
+                ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')           
+                plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'late', num)        
+            
+            
+            #delay, repeat for cells with mean position in the delay region
+            print('delay')
+            delaycells = fitparams[fitparams['Mup']>200]
+            corrs = delaycells['Correlation'].values
+            idxs = np.argsort(corrs)[::-1]
+            idxs = idxs[:min(50, len(idxs))]
+            for num,i in enumerate(idxs):
+                print(num)
+                params = delaycells.iloc[i]
+                n = params['Neuron']
+                s = params['Session']
+                ndata = np.load(region+'/firingdata/'+s+'neuron'+str(n)+'.npy')           
+                plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'delay', num)
+
+    else:
+        n = 153
+        s = 'dFF_tetO_8_07282021_T10processedOutput'
+        ndata = np.load('ExampleData/exampleneuron.npy')
+        params = fitparams[(fitparams.Neuron==n) & (fitparams.Session==s)].iloc[0]
+        plot_ndata(ndata, evs, poses, params['Mue'], params['Mup'], params['Sigp'], n, s, params['Correlation'], 'late', 0)
+
     
         
         

@@ -16,8 +16,8 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-trialdata = pd.read_pickle('trialdata.pkl') #load trial data corresponding to simulation
-alldata = np.load('MIModel.npy') #simulated neural activity data
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl') #load trial data corresponding to simulation
+alldata = np.load('MIModel.npy') #simulated neural activity data, saved output from running 'Models/mutually_inhibiting_competing_chains.py'
 
 #evidence helper function
 def get_cum_evidence(lefts, rights, pos):

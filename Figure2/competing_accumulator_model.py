@@ -18,7 +18,7 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 #load data for trials of lists of left and right cues for each trial
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl')
 
 #parameters
 a = 1 #decay rate

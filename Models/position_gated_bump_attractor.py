@@ -175,7 +175,7 @@ perf = [np.mean(psychometric[c]) for c in cuediffs]
 alldata = alldata[:, :, 1:]
 
 #save all data for use in future analysis
-np.save('bumpmodel.npy', alldata)
+np.save('bumpModel.npy', alldata)
 
 #code for getting sequence plots identical to neural data
 pthresh = .1

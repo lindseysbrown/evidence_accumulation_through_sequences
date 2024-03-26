@@ -16,6 +16,9 @@ from scipy import stats
 import os
 import pandas as pd
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
 #set threshold on cells for significant evidence tuning
 sigthresh = .05
 
@@ -163,22 +166,28 @@ def jointdict_to_tuning(tuningdictright, tuningdictleft):
                 obs[i, p] = np.nan
     return obs
 
-regions = ['ACC', 'DMS', 'RSC', 'HPC']
+if not demo:
+    regions = ['ACC', 'DMS', 'RSC', 'HPC']
 
-#get session files for each region
-files = os.listdir('./DMS')
-DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
+    #get session files for each region
+    files = os.listdir('./DMS')
+    DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
 
-files = os.listdir('./ACC')
-ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
+    files = os.listdir('./ACC')
+    ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
 
-files = os.listdir('./RSC')
-RSCmatfiles = [f for f in files if f.startswith('nic')]
+    files = os.listdir('./RSC')
+    RSCmatfiles = [f for f in files if f.startswith('nic')]
 
-files = os.listdir('./HPC')
-HPCmatfiles = [f for f in files if f.startswith('nic')]
+    files = os.listdir('./HPC')
+    HPCmatfiles = [f for f in files if f.startswith('nic')]
 
-filelist = [ACCmatfiles, DMSmatfiles,  RSCmatfiles,  HPCmatfiles]
+    filelist = [ACCmatfiles, DMSmatfiles,  RSCmatfiles,  HPCmatfiles]
+
+else:
+    regions = ['ACC']
+    matfiles = ['ExampleData/ACCsessionexample.mat']
+    filelist = [matfiles]
 
 #define range of mean firing rate plots
 vm = {'ACC':1.8, 'DMS': 1.9, 'HPC': 1.95, 'RSC': 1.55, 'V1':1.3}
@@ -194,15 +203,24 @@ for region, matfiles in zip(regions, filelist):
     Leftmups = np.array([])
     Rightmups = np.array([])
     
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load parameters from joint gaussian fit
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load parameters from joint gaussian fit
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     
     for file in matfiles:
-        data = loadmat(region+'/'+file) #read in datafile
+        if not demo:
+            data = loadmat(region+'/'+file) #read in datafile
+        else:
+            data = loadmat(file)
         
         if region in ['DMS', 'ACC']: #use correct method to get data in same output format
-            bfile = file.split('dFF_')[1]
-            bfile = bfile.split('processedOutput.mat')[0]+'.mat'
-            cuedata = loadmat(region+'/Behavior/'+bfile)
+            if not demo:
+                bfile = file.split('dFF_')[1]
+                bfile = bfile.split('processedOutput.mat')[0]+'.mat'
+                cuedata = loadmat(region+'/Behavior/'+bfile)
+            else:
+                cuedata = loadmat('ExampleData/ACCsessionexample-behavior.mat')
             lefts = cuedata['logSumm']['cuePos_L'][0][0][0]
             rights = cuedata['logSumm']['cuePos_R'][0][0][0]
             
@@ -250,7 +268,10 @@ for region, matfiles in zip(regions, filelist):
             
             n_trials, n_neurons, n_pos = np.shape(alldata)
         
-        session = file.split('.')[0]
+        if not demo:
+            session = file.split('.')[0]
+        else:
+            session = 'dFF_tetO_8_07282021_T10processedOutput'
         fileparams = fitparams[fitparams['Session']==session]
         pvals = fileparams['Pval'].values
         mues = fileparams['Mue'].values

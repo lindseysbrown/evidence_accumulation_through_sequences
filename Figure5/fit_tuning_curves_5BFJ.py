@@ -16,6 +16,8 @@ from sklearn.preprocessing import minmax_scale
 import pickle
 from scipy.stats import rankdata
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
 
 #dictionary of examples used in each maze region of Figure 5
 earlyexamples = {'ACC': (10, 'dFF_tetO_8_08022021_T10processedOutput'), 'DMS': (4, 'dFF_scott_d2_857_20190426processedOutput'), 'HPC': (50, 'nicFR_E39_20171103'), 'RSC': (3,'nicFR_k50_20160811_RSM_400um_114mW_zoom2p2processedFR'), 'V1':(8,'nicFR_k56_20161004')}
@@ -35,14 +37,21 @@ def logistic(x, k, x0):
     '''
     return 1/(1+np.exp(-k*(x-x0)))
 
+if not demo:
+    regions = ['ACC', 'DMS', 'HPC', 'RSC']
 
-regions = ['ACC', 'DMS', 'HPC', 'RSC']
+else:
+    regions = ['ACC']
 
 for region in regions:
     #open a list of cells that have been verified to meet non-outlier criteria (e.g. for cells with evidence SD<3, there is not exactly one outlier in the bin containing the mean evidence and mean position)
-    with open(region+"-nonoutliercells.p", "rb") as fp:
-        nstoplot = pickle.load(fp)
-    
+    if not demo:
+        with open(region+"-nonoutliercells.p", "rb") as fp:
+            nstoplot = pickle.load(fp)
+    else:
+        with open('ExampleData/'+region+"-nonoutliercells.p", "rb") as fp:
+            nstoplot = pickle.load(fp)
+
     #evidence bins
     evs = np.arange(-15, 16)
     
@@ -53,7 +62,10 @@ for region in regions:
         poses = np.arange(-30, 300, 5)
     
     #load results of fitting logistic and gaussian to just the region around the peak
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams-evonly.csv')
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams-evonly.csv')
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample-evonly.csv')
     
     #only keep cells that meet non-outlier criteria
     keep = np.zeros(len(fitparams))
@@ -65,7 +77,10 @@ for region in regions:
     fitparams = fitparams[fitparams['Keep']>0]
     
     #load parameters from the joint fitting
-    fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    if not demo:
+        fitparamsgauss = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    else:
+        fitparamsgauss = pd.read_csv('ExampleData/ACCparamfitexample.csv')
 
     #only keep cells that meet non-outlier criteria
     keep = np.zeros(len(fitparamsgauss))

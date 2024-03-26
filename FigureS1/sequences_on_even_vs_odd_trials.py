@@ -15,6 +15,9 @@ matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 import os
 import pandas as pd
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
 #set threshold on cells for significant evidence tuning
 sigthresh = .05
 
@@ -89,22 +92,26 @@ def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choic
         neuraldata[it, :, :] = avgbypos.T
     return np.nan_to_num(neuraldata), trialmap, maintrials, correcttrials, lefts, rights, leftchoices, rightchoices
 
+if not demo:
+    regions = ['ACC', 'DMS', 'HPC', 'RSC']
 
-regions = ['ACC', 'DMS', 'HPC', 'RSC']
+    files = os.listdir('./DMS')
+    DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
 
-files = os.listdir('./DMS')
-DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
+    files = os.listdir('./ACC')
+    ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
 
-files = os.listdir('./ACC')
-ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
+    files = os.listdir('./RSC')
+    RSCmatfiles = [f for f in files if f.startswith('nic')]
 
-files = os.listdir('./RSC')
-RSCmatfiles = [f for f in files if f.startswith('nic')]
+    files = os.listdir('./HPC')
+    HPCmatfiles = [f for f in files if f.startswith('nic')]
 
-files = os.listdir('./HPC')
-HPCmatfiles = [f for f in files if f.startswith('nic')]
-
-filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
+    filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
+else:
+    regions = ['ACC']
+    matfiles = ['ExampleData/ACCsessionexample.mat']
+    filelist = [matfiles]
 
 allLCellLChoice = np.zeros((1, 66))
 allLCellRChoice = np.zeros((1, 66))
@@ -136,10 +143,16 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
     Leftmups = np.array([])
     Rightmups = np.array([])
     
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load parameters from joint gaussian fits
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load parameters from joint gaussian fits
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     
     for file in matfiles:
-        data = loadmat(region+'/'+file)
+        if not demo:
+            data = loadmat(region+'/'+file)
+        else:
+            data = loadmat(file)
         
         if region in ['DMS', 'ACC']:
             #create 3d array (trials x neurons x timepoints)
@@ -187,7 +200,10 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
             n_trials, n_neurons, n_pos = np.shape(alldata)
         
         #get parameters for the session
-        session = file.split('.')[0]
+        if not demo:
+            session = file.split('.')[0]
+        else:
+            session = 'dFF_tetO_8_07282021_T10processedOutput'
         fileparams = fitparams[fitparams['Session']==session]
         pvals = fileparams['Pval'].values
         mues = fileparams['Mue'].values

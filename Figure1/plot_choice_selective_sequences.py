@@ -13,7 +13,6 @@ from scipy import stats
 from scipy.stats import f_oneway, kurtosis, skew
 import os
 from scipy.optimize import curve_fit
-import diptest
 import pandas as pd
 
 #set plot labels larger
@@ -21,6 +20,8 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
 
 #set parameters
 sigthresh = .05 #threshold for significance for evidence selectivity
@@ -97,23 +98,28 @@ def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choic
         neuraldata[it, :, :] = avgbypos.T
     return np.nan_to_num(neuraldata), trialmap, maintrials, correcttrials, lefts, rights, leftchoices, rightchoices
 
-regions = ['ACC', 'DMS', 'HPC', 'RSC']
+if not demo:
+    regions = ['ACC', 'DMS', 'HPC', 'RSC']
 
-#identify corresponding matlab files with relevant trial and behavior data
-files = os.listdir('./DMS')
-DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
+    #identify corresponding matlab files with relevant trial and behavior data
+    files = os.listdir('./DMS')
+    DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
 
-files = os.listdir('./ACC')
-ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
+    files = os.listdir('./ACC')
+    ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
 
-files = os.listdir('./RSC')
-RSCmatfiles = [f for f in files if f.startswith('nic')]
+    files = os.listdir('./RSC')
+    RSCmatfiles = [f for f in files if f.startswith('nic')]
 
-files = os.listdir('./HPC')
-HPCmatfiles = [f for f in files if f.startswith('nic')]
+    files = os.listdir('./HPC')
+    HPCmatfiles = [f for f in files if f.startswith('nic')]
 
-filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
+    filelist = [ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
 
+else:
+    regions = ['ACC']
+    matfiles = ['ExampleData/ACCsessionexample.mat']
+    filelist = [matfiles]
 
 #set up arrays for average activity data with shape 1 x number of positions
 allLCellLChoice = np.zeros((1, 66))
@@ -143,14 +149,21 @@ for region, matfiles in zip(regions, filelist):
     Leftmups = np.array([])
     Rightmups = np.array([])
 
-    #load data from joint gaussian fits 
-    fitparamsCS = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
-    fitparamssplit = pd.read_csv(region+'/paramfit/'+region+'allfitparams-split.csv')
-    fitparams = pd.concat([fitparamsCS, fitparamssplit], ignore_index=True)
+    #load data from joint gaussian fits
+    if not demo: 
+        fitparamsCS = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+        fitparamssplit = pd.read_csv(region+'/paramfit/'+region+'allfitparams-split.csv')
+        fitparams = pd.concat([fitparamsCS, fitparamssplit], ignore_index=True)
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
+        examplesession = 'dFF_tetO_8_07282021_T10processedOutput'
 
     #iterate over each session
     for file in matfiles:
-        data = loadmat(region+'/'+file)
+        if not demo:
+            data = loadmat(region+'/'+file)
+        else:
+            data = loadmat(file)
         
         #load behavioral trial data from preprocessing for ACC and DMS regions
         if region in ['DMS', 'ACC']:
@@ -200,7 +213,10 @@ for region, matfiles in zip(regions, filelist):
             n_trials, n_neurons, n_pos = np.shape(alldata)
         
         #load fit parameters from data
-        session = file.split('.')[0]
+        if not demo:
+            session = file.split('.')[0]
+        else:
+            session = examplesession
         fileparams = fitparams[fitparams['Session']==session]
         pvals = fileparams['Pval'].values
         mues = fileparams['Mue'].values
@@ -371,3 +387,4 @@ ax[1,0].set_yticks([])
 ax[1, 1].imshow(allRCellRChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
 ax[1,1].set_xticks([])
 ax[1,1].set_yticks([])
+plt.show()
