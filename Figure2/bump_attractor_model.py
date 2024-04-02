@@ -17,7 +17,7 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 #load trial data on which to test the model, lists of left and right cues for each trial
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl')
 
 #initialize neural ring
 neurons = 35

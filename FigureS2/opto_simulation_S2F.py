@@ -16,7 +16,7 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl')
 
 #parameters
 a = 1 #rate of decay and self-excitation
@@ -234,7 +234,7 @@ NCellLChoice = np.zeros((1, 3301))
 NCellRChoice = np.zeros((1, 3301))
 
 
-alldata = np.load('uncoupledchainsmodel.npy') #load simulated model data
+alldata = np.load('uncoupledchainsModel.npy') #load simulated model data
 lchoices = np.load('lchoices.npy') #load left choices corresponding to simulation
 rchoices = np.load('rchoices.npy') #load right choices corresponding to simulation
 
