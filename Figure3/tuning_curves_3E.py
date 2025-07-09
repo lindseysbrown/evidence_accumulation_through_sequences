@@ -9,7 +9,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import odeint
 import pandas as pd
-from scipy import stats
+
 
 import matplotlib
 matplotlib.rcParams['pdf.fonttype'] = 42

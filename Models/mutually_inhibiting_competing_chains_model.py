@@ -39,6 +39,8 @@ for i in range(1, neurons):
     #feedfoward connections
     W[i, i-1] = c
     W[i+neurons, i-1+neurons] = c
+
+for i in range(neurons):
     #inhibitory connections
     W[i+neurons, i] = -e
     W[i, i+neurons] = -e
