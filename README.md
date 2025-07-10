@@ -26,7 +26,7 @@ and
 'python NeuralDataFits/LinearEncodingModel/linear_encoding_model.py ExampleData/exampleneuron.npy'
 respectively. Results may be compared to the results included in ExampleData for neuron 153 from session dFF_tetO_8_07282021processedOutput.
 
-Code for Figures 1, 5, 6, S1, and S5 should produce plots in less than 5 minutes. Producing the baseline model data simulations for 1000 trials may take up to 6 hours. After this data is obtained, Figure 3, 4, and S1 tuning curves and optogenetic simulations should take less than 15 minutes, but simualtions for the psychometric curves with noisy inputs may again take up to 6 hours.
+Code for Figures 1, 5, 6, S1, and S5 should produce plots in less than 5 minutes. Producing the baseline model data simulations for 1000 trials may take up to 6 hours. After this data is obtained, Figure 3, 4, and S1 tuning curves and optogenetic simulations should take less than 15 minutes, but simulations for the psychometric curves with noisy inputs may again take up to 6 hours.
 
 Fits of the joint gaussian and linear encoding model to individual cells should each take less than 10 minutes.
 
