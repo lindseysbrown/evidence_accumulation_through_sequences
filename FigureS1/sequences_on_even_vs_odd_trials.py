@@ -121,6 +121,7 @@ allRCellRChoice = np.zeros((1, 66))
 
 allLeftmups = np.array([])
 allRightmups = np.array([])
+allNonmups = np.array([])
 
 for region, matfiles in zip(regions, filelist): #iterate over brain regions
     print(region)
@@ -137,11 +138,14 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
     testRCellLChoice = np.zeros((1, 66))
     testRCellRChoice = np.zeros((1, 66))    
     
-    SCellLChoice = np.zeros((1, 66))
-    SCellRChoice = np.zeros((1, 66))
+    trainSCellLChoice = np.zeros((1, 66))
+    trainSCellRChoice = np.zeros((1, 66))
+    testSCellLChoice = np.zeros((1, 66))
+    testSCellRChoice = np.zeros((1, 66))
        
     Leftmups = np.array([])
     Rightmups = np.array([])
+    Nonmups = np.array([])
     
     if not demo:
         fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv') #load parameters from joint gaussian fits
@@ -205,11 +209,18 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
         else:
             session = 'dFF_tetO_8_07282021_T10processedOutput'
         fileparams = fitparams[fitparams['Session']==session]
-        pvals = fileparams['Pval'].values
+        pvals = fileparams['PvalMSE'].values
         mues = fileparams['Mue'].values
         mups = fileparams['Mup'].values
         siges = fileparams['Sige'].values
         corrs = fileparams['Correlation'].values
+        
+        #non-selective cells
+        vpnon = pvals>sigthresh
+        nonmups = mups[vpnon]
+        nonis = fileparams['Neuron'].values[vpnon]
+        nonidata = alldata[:, nonis, :]
+        nonidata = nonidata[correcttrials, :,:]
         
         #get only evidence selective parameters
         vp = pvals<sigthresh
@@ -234,11 +245,14 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
         
         Leftmups = np.concatenate((Leftmups, leftmups))
         Rightmups = np.concatenate((Rightmups, rightmups))
+        Nonmups = np.concatenate((Nonmups, nonmups))
         
         
         #work only on the odd trials
         trainalldata = alldata[::2, :, :] #even trials
         testalldata = alldata[1::2, :, :] #odd trials
+        trainnonidata = nonidata[::2, :, :]
+        testnonidata = nonidata[1::2, :, :]
     
         #get corresponing choices for even/odd trials
         trainlchoices = [int(l/2) for l in lchoices if l%2==0]
@@ -252,7 +266,11 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
         trainrightdata = trainalldata[trainrchoices, :, :]
         testleftdata = testalldata[testlchoices, :, :]
         testrightdata = testalldata[testrchoices, :, :]
-          
+        trainnonileftdata = trainnonidata[trainlchoices, :, :]
+        trainnonirightdata = trainnonidata[trainrchoices, :,:]
+        testnonileftdata = testnonidata[testlchoices, :, :]
+        testnonirightdata = testnonidata[testrchoices, :,:]
+
         if len(leftis)>0:
             trainleftcellsleftchoice = np.nanmean(trainleftdata[:, leftis, :], axis=0)
             trainleftcellsrightchoice = np.nanmean(trainrightdata[:, leftis, :], axis=0)
@@ -271,16 +289,27 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
             testrightcellsleftchoice = np.nanmean(testleftdata[:, rightis, :], axis=0)
             testrightcellsrightchoice = np.nanmean(testrightdata[:, rightis, :], axis=0)
             testRCellLChoice = np.vstack((testRCellLChoice, testrightcellsleftchoice))
-            testRCellRChoice = np.vstack((testRCellRChoice, testrightcellsrightchoice))            
+            testRCellRChoice = np.vstack((testRCellRChoice, testrightcellsrightchoice)) 
+
+        #non selective cells
+        trainSCellLChoice = np.vstack((trainSCellLChoice, np.nanmean(trainnonileftdata, axis = 0)))
+        trainSCellRChoice = np.vstack((trainSCellRChoice, np.nanmean(trainnonirightdata, axis=0)))
+        testSCellLChoice = np.vstack((testSCellLChoice, np.nanmean(testnonileftdata, axis = 0)))
+        testSCellRChoice = np.vstack((testSCellRChoice, np.nanmean(testnonirightdata, axis=0)))                   
 
     
     allLeftmups = np.concatenate((allLeftmups, Leftmups))
     allRightmups = np.concatenate((allRightmups, Rightmups))
+    allNonmups = np.concatenate((allNonmups, Nonmups))
     
     trainLCellLChoice = trainLCellLChoice[1:, :]
     trainLCellRChoice = trainLCellRChoice[1:, :]
     testLCellLChoice = testLCellLChoice[1:, :]
     testLCellRChoice = testLCellRChoice[1:, :]
+    trainSCellLChoice = trainSCellLChoice[1:, :]
+    testSCellLChoice = testSCellLChoice[1:, :]
+    trainSCellRChoice = trainSCellRChoice[1:, :]
+    testSCellRChoice = testSCellRChoice[1:, :]
     
     #sort by fit mean position
     newLis = np.argsort(Leftmups)
@@ -305,6 +334,13 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
     testRCellLChoice = testRCellLChoice[newRis, :]
     testRCellRChoice = testRCellRChoice[newRis, :]
 
+    #sort by fit mean position and resort to be in sequence order
+    newNis = np.argsort(Nonmups)
+    trainSCellLChoice = trainSCellLChoice[newNis, :]
+    trainSCellRChoice = trainSCellRChoice[newNis, :]
+    testSCellLChoice = testSCellLChoice[newNis, :]
+    testSCellRChoice = testSCellRChoice[newNis, :]
+
     #normalized plots based on odd trials
     for i in range(len(newLis)):
         M = np.nanmax([np.nanmax(testLCellLChoice[i, :]), np.nanmax(testLCellRChoice[i, :])])
@@ -322,8 +358,16 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
         testRCellLChoice[i, :] = (testRCellLChoice[i, :]-m)/(M-m)
         testRCellRChoice[i, :] = (testRCellRChoice[i, :]-m)/(M-m)
 
+    for i in range(len(newNis)):
+        M = np.nanmax([np.nanmax(testSCellLChoice[i, :]), np.nanmax(testSCellRChoice[i, :])])
+        m = np.nanmin([np.nanmin(testSCellLChoice[i, :]), np.nanmin(testSCellRChoice[i, :])])
+        trainSCellLChoice[i, :] = (trainSCellLChoice[i, :]-m)/(M-m)
+        trainSCellRChoice[i, :] = (trainSCellRChoice[i, :]-m)/(M-m)
+        testSCellLChoice[i, :] = (testSCellLChoice[i, :]-m)/(M-m)
+        testSCellRChoice[i, :] = (testSCellRChoice[i, :]-m)/(M-m)
+
     #plot even trials
-    fig, ax = plt.subplots(2, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis)]})
+    fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis), len(newNis)]})
     
     vm = 1
     vl = 0
@@ -348,11 +392,20 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
     ax[1,1].set_xticks([])
     ax[1,1].set_yticks([])
 
+    ax[2, 0].imshow(trainSCellLChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
+    ax[2, 0].set_ylabel('non. pref.')
+    ax[2,0].set_xticks([])
+    ax[2,0].set_yticks([])
+    
+    ax[2, 1].imshow(trainSCellRChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
+    ax[2,1].set_xticks([])
+    ax[2,1].set_yticks([])   
+
     plt.suptitle(region+'even trials')
     plt.show()
     
     #plot odd trials
-    fig, ax = plt.subplots(2, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis)]})
+    fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis), len(newNis)]})
     
     vm = 1
     vl = 0
@@ -376,6 +429,15 @@ for region, matfiles in zip(regions, filelist): #iterate over brain regions
     ax[1, 1].imshow(testRCellRChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
     ax[1,1].set_xticks([])
     ax[1,1].set_yticks([])
+
+    ax[2, 0].imshow(testSCellLChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
+    ax[2, 0].set_ylabel('non. pref.')
+    ax[2,0].set_xticks([])
+    ax[2,0].set_yticks([])
+    
+    ax[2, 1].imshow(testSCellRChoice, cmap = 'Greys', aspect='auto', vmin=vl, vmax=vm)
+    ax[2,1].set_xticks([])
+    ax[2,1].set_yticks([])
 
     plt.suptitle(region+' odd trials')
     plt.show() 
