@@ -273,7 +273,7 @@ for region, matfiles in zip(regions, filelist):
         else:
             session = 'dFF_tetO_8_07282021_T10processedOutput'
         fileparams = fitparams[fitparams['Session']==session]
-        pvals = fileparams['Pval'].values
+        pvals = fileparams['PvalMSE'].values
         mues = fileparams['Mue'].values
         mups = fileparams['Mup'].values
         siges = fileparams['Sige'].values
