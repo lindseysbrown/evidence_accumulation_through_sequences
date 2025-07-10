@@ -89,8 +89,8 @@ for region in regions:
     else:
         fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     
-    #use fit pvalues to determine which fits were significant and consider only those cells
-    pvals = fitparams['Pval'].values
+    #use fit pvalues from MSE to determine which fits were significant and consider only those cells
+    pvals = fitparams['PvalMSE'].values
     signs = fitparams['Neuron'].values[pvals<.05]
     sigsessions = fitparams['Session'].values[pvals<.05]
     allsigneurons = [(signs[i], sigsessions[i]) for i in range(len(signs))]
@@ -116,10 +116,10 @@ for region in regions:
     sigenorm = np.zeros(len(mue))
     for i, e in enumerate(mue):
         if e<0: #normalize by maximum magnitude of evidence of the same sign
-            muenorm[i] = mue[i]/np.abs(fitparams['MinE'].values[i])
+            muenorm[i] = mue[i]/np.abs(fitparams['MinEMean'].values[i])
         else:
-            muenorm[i] = mue[i]/np.abs(fitparams['MaxE'].values[i])
-        sigenorm[i] = sige[i]/(fitparams['MaxE'].values[i]-fitparams['MinE'].values[i]) #normalize by evidence range
+            muenorm[i] = mue[i]/np.abs(fitparams['MaxEMean'].values[i])
+        sigenorm[i] = sige[i]/(fitparams['MaxEMean'].values[i]-fitparams['MinEMean'].values[i]) #normalize by evidence range
     fitparams['NormMue'] = muenorm
     fitparams['NormSige'] = sigenorm
     
