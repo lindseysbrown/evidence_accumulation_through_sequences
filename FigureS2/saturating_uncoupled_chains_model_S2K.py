@@ -17,7 +17,7 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
 
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl')
 scale=.5
 
 #parameters
@@ -38,6 +38,7 @@ for i in range(1, neurons):
     W[i, i-1] = b
     W[i+neurons, i-1+neurons] = b
 
+#position gating signal
 def P(t):
     '''
     Position gating signal, equal to T when neuron is active, assuming constant velocity
@@ -100,10 +101,10 @@ def simulate(Lcues, Rcues, input_noise = False, Inoise = .67):
         Rkeep = np.random.uniform(0, 1, size = len(Rcues))
         Rcues[Rkeep<Inoise] =  500
 
-    def chain(y, t): #differntial equation, Eq. (S2)
-        dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0)
-        saturated = (y>13) & (dydt>0)
-        dydt[saturated] = 0
+    def chain(y, t): #differntial equation
+        dydt = -a*y+np.maximum(W@y+P(t)+I(t, Lcues, Rcues)-T, 0) #Eq. (S2)
+        saturated = (y>13) & (dydt>0) #test if firing rate above 13
+        dydt[saturated] = 0 #anywhere that is saturated with positive derivative, does not increase further
         return dydt
 
     y0 = np.concatenate((Lchain, Rchain))
@@ -122,10 +123,8 @@ psychometric = {}
 for t in range(len(trialdata)):
     print(t)
     Lcues = trialdata['leftcues'][t]
-    #Lcues = [10, 20, 35, 46, 55, 78, 89, 93, 100, 106, 111, 150]
     Lcues = np.append(Lcues, 500)
     Rcues = trialdata['rightcues'][t]
-    #Rcues = []
     Rcues = np.append(Rcues, 500)
     sol = simulate(Lcues, Rcues)
     delta = len(Lcues)-len(Rcues)
@@ -137,4 +136,5 @@ for t in range(len(trialdata)):
 
 alldata = alldata[:, :, 1:]
 
+#save solution for future analysis
 np.save('saturatinginputssol.npy', alldata)
