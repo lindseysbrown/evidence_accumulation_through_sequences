@@ -1,0 +1,396 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Mon Aug 19 11:14:15 2024
+
+@author: lindseyb
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+import matplotlib
+matplotlib.rcParams['pdf.fonttype'] = 42
+matplotlib.rcParams['ps.fonttype'] = 42
+matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
+import patsy
+from scipy.signal import convolve
+import os
+import pandas as pd
+import pickle
+from scipy.io import loadmat
+from sklearn.linear_model import Ridge
+from scipy.stats import sem
+
+#demo
+demo = True #True to run with example datasets, False to run for full data in structured folders
+
+sigthresh = .05
+
+def mse(x, y):
+    '''
+    calculate the mean squared difference between x and y
+    '''
+    return sum((x-y)**2)
+
+def get_cum_evidence(lefts, rights, pos):
+    '''
+    calculate cumulative evidence at each position in the maze
+    === inputs ===
+    lefts: list of positions of left towers
+    rights: list of positions of right towers
+    pos: list of maze positions
+    '''
+    cum_ev = np.zeros(len(pos))
+    for i, p in enumerate(pos):
+        cum_ev[i] = np.sum(lefts<p)-np.sum(rights<p)
+    return cum_ev
+
+def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choices):
+    '''
+    function to get same output format as ACC and DMS data for the RSC and HPC data
+
+    ===inputs===
+    data: array of neural firing data
+    position: positions corresponding to neural data
+    trial: trial numbers correspondig to each data point
+    Lcuepos: position of left cues
+    Rcuepos: position of right cues
+    mazeID: level of the maze in the shaping protocol
+    corrects: mapping of whether each trial was correct
+    choices: mapping of which choice the animal made on each trial
+
+    ===outputs===
+    neuraldata: array of neural data of shape (trials, neurons, timepoints)
+    trialmap: mapping between trial index and trial number
+    maintrials: trials for which accumulation of evidence was required
+    correcttrials: trials for which the animal was correct
+    lefts: left cues for each trial
+    rights: right cues for each trial
+    leftchoices: trials for which the animal made a left choice
+    rightchoices: trials for which the animal made a right choice
+    '''
+
+    #get relevant data shapes
+    n_neurons = np.shape(data)[1]
+    trials = list(set([x[0] for x in trial]))
+    n_trials = len(trials)
+    n_pos = 66
+    base = 5
+
+    #setup output arrays
+    maintrials = []
+    correcttrials = []
+    leftchoices = []
+    rightchoices = []
+    lefts = []
+    rights = []
+    neuraldata = np.zeros((n_trials, n_neurons, n_pos))
+    trialmap = np.zeros((n_trials,))
+
+    #for each trial in the list
+    for it, t in enumerate(trials):
+        trialmap[it] = t
+        inds = np.where(trial==t)[0]
+        maze = mazeID[inds[0]]
+        if maze >9: #check that trial is an accumulation of evidence maze
+            maintrials.append(it)
+            #correct trials only includes maintrials
+            if corrects[inds[0]]:
+                correcttrials.append(it)
+        if choices[inds[0]]==0:
+            leftchoices.append(it)
+        else:
+            rightchoices.append(it)
+        rights.append(Rcuepos[inds[0]][0][0])
+        lefts.append(Lcuepos[inds[0]][0][0])
+        trialdata = data[inds]
+        pos = position[inds]
+        posbinned = base*np.round(pos/base) #assign position bin to each trial
+        avgbypos = np.zeros((n_pos, n_neurons))
+        for ip, p in enumerate(range(-30, 300, 5)):
+            pis = np.where(posbinned == p)[0]
+            if len(pis)>0:
+                avgbypos[ip, :] = np.nanmean(trialdata[pis, :], axis=0) #take the average of all data within the position bin
+            else:
+                avgbypos[ip, :] = avgbypos[ip-1, :]
+        neuraldata[it, :, :] = avgbypos.T
+    return np.nan_to_num(neuraldata), trialmap, maintrials, correcttrials, lefts, rights, leftchoices, rightchoices
+
+#get cubic spline basis set
+these_knots = np.linspace(0,300, 4)
+
+x = np.linspace(0., 300, 60)
+y = patsy.bs(x, df=7, degree=3, include_intercept=True)
+
+
+if not demo:
+    regions = ['ACC', 'RSC']
+
+    #get session files for each region
+    files = os.listdir('./ACC')
+    ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
+
+    files = os.listdir('./RSC')
+    RSCmatfiles = [f for f in files if f.startswith('nic')]
+
+    filelist = [ACCmatfiles, RSCmatfiles]
+
+else:
+    regions = ['ACC']
+    matfiles = ['ExampleData/ACCsessionexample.mat']
+    filelist = [matfiles]
+
+alphalist = [1] #regularization value
+
+colors = ['red', 'orange', 'yellow', 'green', 'blue', 'purple'] #colors for plotting example trials
+
+with open('ExampleData/numcorrecttrials.pkl', 'rb') as handle:
+    numcorrecttrials = pickle.load(handle)
+
+numplot = 0
+toplot = False
+
+for region, matfiles in zip(regions, filelist):
+    #load parameters from joint gaussian fit
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
+    fits = fitparams['MSE'].values[fitparams['PvalMSE'].values < .05]
+    
+    #set up arrays to store fit kernels
+    lefttoLcuekernels = {}
+    lefttoRcuekernels = {}#np.zeros((1, 60))
+    performance = {}
+    for a in alphalist:
+        lefttoLcuekernels[a] = np.zeros((1, 60))
+        lefttoRcuekernels[a] = np.zeros((1, 60))
+        performance[a] = []
+    
+    #load session data
+    for f, file in enumerate(matfiles):
+        if not demo:
+            data = loadmat(region+'/HalfGaussianFiringRate/'+file)
+        else:
+            data = loadmat('ExampleData/ACCsessionexample.mat')
+        
+        if region in ['DMS', 'ACC']:
+            if not demo:
+                bfile = file.split('dFF_')[1]
+                bfile = bfile.split('processedOutput-NEW.mat')[0]+'.mat'
+                cuedata = loadmat(region+'/Behavior/'+bfile)
+            else:
+                cuedata = loadmat('ExampleData/ACCsessionexample-behavior.mat')
+            
+            lefts = cuedata['logSumm']['cuePos_L'][0][0][0]
+            rights = cuedata['logSumm']['cuePos_R'][0][0][0]
+            
+            #create 3d array (trials x neurons x timepoints)
+            n_neurons = np.shape(data['out']['FRHG_pos'][0][0])[1]
+            [n_trials, n_pos] = np.shape(data['out']['FRHG_pos'][0][0][0][0]) 
+            
+            alldata = np.zeros((n_trials, n_neurons, n_pos))
+            
+            maintrials = data['out']['Trial_Main_Maze'][0][0][0]-1 #subtract one for difference in matlab indexing
+            correcttrials = data['out']['correct'][0][0][0]-1
+            
+            #get data normalized by position
+            for i in range(n_neurons):
+                alldata[:, i, :] = data['out']['FRHG_pos'][0][0][0][i]
+            
+            #alldata[np.isnan(alldata)]=0 #replace nan values with 0
+            pos = data['out']['Yposition'][0][0][0]
+            
+            #get different data subsets for left and right choices
+            leftchoices_correct = data['out']['correct_left'][0][0][0]-1
+            leftchoices_incorrect = data['out']['incorrect_left'][0][0][0]-1
+            rightchoices_correct = data['out']['correct_right'][0][0][0]-1
+            rightchoices_incorrect = data['out']['incorrect_right'][0][0][0]-1 
+            
+            lchoices = np.concatenate((leftchoices_correct, leftchoices_incorrect))
+            rchoices = np.concatenate((rightchoices_correct, rightchoices_incorrect)) 
+            
+            
+            avgdata = np.nanmean(alldata[:, :, :], axis=0) #neurons x position
+        else:
+            Fdata = data['nic_output']['ROIactivities'][0][0]
+            ndata = data['nic_output']['firingratehalfgauss'][0][0]
+            ndata[np.isnan(Fdata)] = np.nan #replace FR data where there were Nans in F trace
+            position = data['nic_output']['Position'][0][0]
+            time = data['nic_output']['Time'][0][0]
+            Lcuepos = data['nic_output']['Lcuepos'][0][0]
+            Rcuepos = data['nic_output']['Rcuepos'][0][0]
+            mazeID = data['nic_output']['MazeID'][0][0]
+            corrects = data['nic_output']['ChoiceCorrect'][0][0]
+            choices = data['nic_output']['Choice'][0][0]
+            
+            trial = data['nic_output']['Trial'][0][0]
+               
+            alldata, tmap, maintrials, correcttrials, lefts, rights, lchoices, rchoices = get_pos_out(ndata, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choices)
+            pos = np.arange(-30, 300, 5)
+            
+            n_trials, n_neurons, n_pos = np.shape(alldata)          
+
+        
+        if not demo:
+            session = file.split('-NEW.')[0]
+        else:
+            session = 'dFF_tetO_8_07282021_T10processedOutput'
+
+        #get gaussian parameters corresponding to session
+        fileparams = fitparams[fitparams['Session']==session]
+        pvals = fileparams['PvalMSE'].values
+        mues = fileparams['Mue'].values
+        mups = fileparams['Mup'].values
+        sigps = fileparams['Sigp'].values
+        siges = fileparams['Sige'].values
+        corrs = fileparams['Correlation'].values
+        fits = fileparams['MSE'].values
+
+        #get only evidence selective parameters
+        vp = pvals<sigthresh
+        evselectiveneurons = fileparams['Neuron'].values[vp]
+        mues = mues[vp]
+        mups = mups[vp]
+        sigps = sigps[vp]
+        alldata = alldata[:, evselectiveneurons, :]
+
+        #calculate evidence at each position
+        evidence = np.zeros((n_trials, n_pos))
+        for i in range(n_trials):
+            evidence[i] = get_cum_evidence(lefts[i], rights[i], pos)
+        evidence = evidence[correcttrials, :]
+
+        #restrict to correct trials
+        choices = np.zeros(n_trials)
+        choices[lchoices] = 1
+        choices = choices[correcttrials]
+        alldata = alldata[correcttrials, :, :]
+        lchoices = np.where(choices==1)[0]
+        rchoices = np.where(choices==0)[0]
+        
+        #divide neurons by choice preference
+        leftis = np.where(mues>0)[0]
+        rightis = np.where(mues<0)[0]        
+        leftmups = mups[leftis]
+        rightmups = mups[rightis]
+        leftsigps = sigps[leftis]
+        rightsigps = sigps[rightis]
+        
+
+        
+        #create feature matrix
+        X = np.zeros((len(correcttrials)*(n_pos-5), 16))
+        
+        
+        for idx, t in enumerate(correcttrials):
+            ps = pos[5:]
+            es = 0*np.sign(evidence[idx, 5:])
+            if region in ['ACC', 'DMS']:
+                lcues = lefts[t][0]
+                rcues = rights[t][0]
+            else:
+                lcues = lefts[t]
+                rcues = rights[t]
+            
+            #create binary vector with ones at position of cue appearance
+            Lcuelocs = np.zeros(n_pos,)
+            Rcuelocs = np.zeros(n_pos,)
+            feats = np.concatenate((0*ps.reshape(-1, 1), es.reshape(-1, 1)), axis = 1)
+            for l in lcues:
+                cuebin = np.where((pos-l)>0)[0][0]-1
+                Lcuelocs[cuebin-2] = 1 #locked to cue appearance
+            for r in rcues:
+                cuebin = np.where((pos-r)>0)[0][0]-1
+                Rcuelocs[cuebin-2] = 1
+
+            #convolve cue positions with spline basis
+            for spl in range(7):
+                zL = convolve(Lcuelocs[5:], y[:, spl], mode = 'full')[:(n_pos-5)]
+                zR = convolve(Rcuelocs[5:], y[:, spl], mode = 'full')[:(n_pos-5)]
+
+                feats = np.concatenate((feats, zL.reshape(-1, 1), zR.reshape(-1, 1)), axis = 1) #add to feature matrix
+                    
+            X[idx*(n_pos-5):(idx+1)*(n_pos-5), :] = feats
+        
+        #calculate difference between left and right populations to predict with model
+        if len(leftis)>0 and len(rightis)>0:
+            leftactivity = alldata[:, leftis, :]
+            lefttotal = np.nanmean(leftactivity, axis=1)
+
+            lefttotal = lefttotal[:, 5:]
+            
+            rightactivity = alldata[:, rightis, :] 
+            righttotal = np.nanmean(rightactivity, axis = 1)
+
+            righttotal = righttotal[:, 5:]
+            
+            difftotal = (lefttotal - np.nanmean(lefttotal, axis=0))-(righttotal-np.nanmean(righttotal, axis=0))
+            
+            yd = difftotal.flatten()            
+            
+
+            #predict yd from X with ridge regression
+            X = X[~np.isnan(yd)]
+            yd = yd[~np.isnan(yd)]
+            
+            for a in alphalist:
+                model = Ridge(alpha=a)
+                model.fit(X, yd)
+                coefs = model.coef_
+                
+                ypred = model.predict(X)
+                
+                #use fit coefficients to find kernels from basis set
+                Lcuekernel = y[:, :7]@coefs[2:16:2] 
+                Rcuekernel = y[:, :7]@coefs[3:16:2]                    
+
+                
+        
+                lefttoLcuekernels[a] = np.vstack((lefttoLcuekernels[a], Lcuekernel))
+                lefttoRcuekernels[a] = np.vstack((lefttoRcuekernels[a], Rcuekernel))
+
+                
+                performance[a].append(model.score(X, yd))
+                
+                
+                #plot some example trials
+                if f<10:
+                    try:
+                        ypred_unflat = ypred.reshape(np.shape(difftotal))
+                    
+                        bestcorrs = np.zeros(len(difftotal))
+                        
+                        plt.figure()
+                        for j in range(5):
+                            plt.plot(difftotal[j], color = colors[j])
+                            plt.plot(ypred_unflat[j], linestyle = '--', color = colors[j])
+                        
+                        plt.xlim([0,60])
+                        plt.ylim([-1.2, 1.2])
+                        plt.title('Example Trials')
+                        plt.show()
+                    except:
+                        print('contained nans')
+                        
+                
+            
+
+    #plot resulting kernels          
+    for a in alphalist:          
+        lefttoLcuekernels[a] = lefttoLcuekernels[a][1:]
+        lefttoRcuekernels[a] = lefttoRcuekernels[a][1:]
+        
+        perf = np.mean(performance[a])
+
+
+        plt.figure()
+        plt.errorbar(np.arange(0, 300, 5), np.nanmean(lefttoLcuekernels[a], axis=0), yerr = sem(lefttoLcuekernels[a], axis=0, nan_policy='omit'), color = 'red')
+        plt.errorbar(np.arange(0, 300, 5), np.nanmean(lefttoRcuekernels[a], axis=0), yerr = sem(lefttoRcuekernels[a], axis=0, nan_policy='omit'), color = 'blue')
+        plt.xlabel('distance from cue appearance (cm)')
+        plt.ylabel('kernel amplitude')
+        plt.ylim([-.1, .1])
+        plt.xlim([0, 200])
+        plt.axhline(0, color = 'k', linestyle = '--')
+        plt.title(region+' Cue Kernels, r2 ='+str(perf))
+        plt.show()       
+                        
