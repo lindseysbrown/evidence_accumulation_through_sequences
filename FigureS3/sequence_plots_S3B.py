@@ -15,19 +15,19 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-trialdata = pd.read_pickle('trialdata.pkl')
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl')
 
-alldata = np.load('jointbumpsol.npy')
+alldata = np.load('jointbumpsol.npy') #all trial data generated from running planar_bump_attractor
 alldata = alldata.T
-lchoices = np.load('lchoices.npy')
-rchoices = np.load('rchoices.npy')
+lchoices = np.load('ExampleData/lchoices.npy') #trials on which left choice was made
+rchoices = np.load('ExampleData/rchoices.npy') #trials on which right choice was made
 
 
-#code for getting sequence plots identical to neural data
+#code for getting sequence plots
 pthresh = .1
-region_threshold = .25 #.5 Ryan
+region_threshold = .25 
 region_width = 4
-base_thresh = 0 #3 Ryan
+base_thresh = 0 
 
 def get_regions(data, M, threshold, width, base_thresh):
     upreg = np.where(data>(threshold*M))[0]
@@ -139,10 +139,6 @@ for n in range(n_neurons):
     if np.max(activity)<.1:
         lowfiringis.append(n)
 
-#np.save('bumpneuronslowfiring.npy', np.array(lowfiringis))
-
-lowfiringis = np.load('bumpneuronslowfiring.npy')
-
 alldata = np.delete(alldata, lowfiringis, 1)
     
 
@@ -243,69 +239,7 @@ ax[2,1].set_xlabel('position (cm)')
 ax[2,1].set_yticks([])
 plt.suptitle('NonNormalized Sequences')
 cbar = fig.colorbar(im, ax=ax.ravel().tolist(), shrink=0.95)
-plt.savefig('SeqJointBump-OnlyActive-NonNormalized.pdf', transparent = True)
+plt.show()
 
 
-plt.figure()
-for i in range(0, len(newNis), 250):
-    plt.plot((NCellLChoice[i, :]+NCellRChoice[i, :])/2)
-    
-'''
-#normalized plots
-for i in range(len(newLis)):
-    M = np.max([np.max(LCellLChoice[i, :]), np.max(LCellRChoice[i, :])])
-    m = np.min([np.min(LCellLChoice[i, :]), np.min(LCellRChoice[i, :])])
-    LCellLChoice[i, :] = (LCellLChoice[i, :]-m)/(M-m)
-    LCellRChoice[i, :] = (LCellRChoice[i, :]-m)/(M-m)
-    
-for i in range(len(newRis)):
-    M = np.max([np.max(RCellLChoice[i, :]), np.max(RCellRChoice[i, :])])
-    m = np.min([np.min(RCellLChoice[i, :]), np.min(RCellRChoice[i, :])])
-    RCellLChoice[i, :] = (RCellLChoice[i, :]-m)/(M-m)
-    RCellRChoice[i, :] = (RCellRChoice[i, :]-m)/(M-m)
 
-for i in range(len(newSis)):
-    M = np.max([np.max(SCellLChoice[i, :]), np.max(SCellRChoice[i, :])])
-    m = np.min([np.min(SCellLChoice[i, :]), np.min(SCellRChoice[i, :])])
-    SCellLChoice[i, :] = (SCellLChoice[i, :]-m)/(M-m)
-    SCellRChoice[i, :] = (SCellRChoice[i, :]-m)/(M-m)
-
-fig, ax = plt.subplots(3, 2, gridspec_kw={'width_ratios': [1, 1], 'height_ratios': [len(newLis), len(newRis), len(newSis)]})
-
-ax[0, 0].imshow(LCellLChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[0, 0].set_title('left choice trials')
-ax[0, 0].set_ylabel('left pref.')
-ax[0,0].set_xticks([])
-ax[0,0].set_yticks([])
-
-ax[0, 1].imshow(LCellRChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[0, 1].set_title('right choice trials')
-ax[0,1].set_xticks([])
-ax[0,1].set_yticks([])
-
-ax[1, 0].imshow(RCellLChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[1, 0].set_ylabel('right pref.')
-ax[1,0].set_xticks([])
-ax[1,0].set_yticks([])
-
-ax[1, 1].imshow(RCellRChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[1,1].set_xticks([])
-ax[1,1].set_yticks([])
-
-ax[2, 0].imshow(SCellLChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[2, 0].set_ylabel('non-pref.')
-ax[2,0].set_xticks([0, 300, 1300, 2300, 2800, 3300])
-ax[2,0].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-ax[2,0].set_xlabel('position (cm)')
-ax[2,0].set_yticks([])
-
-im = ax[2, 1].imshow(SCellRChoice, cmap = 'Greys', aspect='auto', vmin=0, vmax=1)
-ax[2,1].set_xticks([0, 300, 1300, 2300, 2800, 3300])
-ax[2,1].set_xticklabels(['-30', '0', 'cues', '200', 'delay', '300'])
-ax[2,1].set_xlabel('position (cm)')
-ax[2,1].set_yticks([])
-plt.suptitle('Normalized Sequences')
-
-cbar = fig.colorbar(im, ax=ax.ravel().tolist(), shrink=0.95)
-plt.savefig('SeqJointBump-OnlyActive-Normalized.pdf', transparent = True)
-'''

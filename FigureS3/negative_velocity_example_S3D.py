@@ -16,7 +16,7 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 
-trialdata = pd.read_pickle('trialdata.pkl') #file containing data for set of trials with positions of left and right cues on each trial
+trialdata = pd.read_pickle('ExampleData/trialdata.pkl') #file containing data for set of trials with positions of left and right cues on each trial
 
 #initialize neural rings
 neurons = 35
@@ -28,11 +28,10 @@ P0 = 20 #postion width
 T = 300 #threshold
 X = 0.04 #external current
 a = 1.1 #decay rate
-b = 0#0.088 #feedforward synaptic connections
 w0 = 0.12 #parameterization of within layer cosine connectivity
 w1 = -1 #parameterization of within layer cosine connectivity
-w0p = 0.12
-w1p = -1
+w0p = 0.12 #parameterization for cosine connectivity across positions
+w1p = -1 #parameterization for cosine connectivity across positions
 
 #activation function
 def F(x):
@@ -62,18 +61,7 @@ posbump = np.zeros((timepoints, timepoints))
 for i in range(timepoints):
     for j in range(timepoints):
        Wpos[(i*neurons):((i+1)*neurons), (j*neurons):((j+1)*neurons)] = w0p*(np.cos(phip(i)-phip(j))+w1p)
-        # posbump[i, j] = w0p*(np.cos(phip(i)-phip(j))+w1p)
 
-#for i in range(neurons):
- #   Wpos[i::neurons, i::neurons] = posbump
-
-
-#position gating signal
-def P(t):
-    P = np.zeros(neurons*timepoints)
-    i = int(np.floor(t/P0))
-    P[neurons*i:neurons*(i+1)]=T+X #assign all neurons at position layer to threshold level
-    return P
 
 #external input function
 def I(t, C, Lcues, Rcues):
@@ -109,7 +97,7 @@ def Iv(t, C, v):
         I = np.roll(C, 35)
     else:
         I = np.zeros((neurons*timepoints,)) 
-    return np.abs(v(t))*I
+    return np.abs(v(t)/50)*I
 
 def correct(sol, Lcues, Rcues):
     '''
@@ -152,7 +140,7 @@ def simulate(Lcues, Rcues, v, input_noise = False, Inoise = .67):
         '''
         differential equation for evolution of the position gated bump attractor from Eq. (2)
         '''
-        dydt = -a*y+(F(W@y+Wpos@y+.2*I(t, y, Lcues, Rcues)+.045*Iv(t, y, v))) #+.2*I(t, y, Lcues, Rcues)
+        dydt = -a*y+(F(W@y+Wpos@y+.2*I(t, y, Lcues, Rcues)+.045*Iv(t, y, v))) 
         return dydt
     
     y0 = Cring
@@ -171,21 +159,19 @@ peaks = []
 
 def v(t):
     if t<150:
-        return 1
+        return 50
     if t<225:
-        return -1.5
+        return -75
     if t<300:
         return 0
     else:
-        return 1
+        return 50
     
-for t in range(1):#range(len(trialdata[:25])): #loop over all trials in trialdata
+for t in range(1):#simulate a single example trial
     Lcues = trialdata['leftcues'][t]
-    Lcues = [22, 30, 50, 107, 135, 189]
-    Lcues = np.append(Lcues, 500) #append cue to the end to avoid empty arrays
+    Lcues = np.array([22, 30, 50, 107, 135, 189])
     Rcues = trialdata['rightcues'][t]
-    Rcues = [55, 67]
-    Rcues = np.append(Rcues, 500)
+    Rcues = np.array([55, 67])
     sol = simulate(Lcues, Rcues, v)
     delta = len(Rcues)-len(Lcues) #final cue difference
 
@@ -195,36 +181,32 @@ for t in range(1):#range(len(trialdata[:25])): #loop over all trials in trialdat
     deltas.append(delta)
     peaks.append(np.argmax(alldata[-1, 560:, -1]))
 
-plt.figure()
-plt.scatter(deltas, peaks)
-plt.xlabel('evidence')
-plt.ylabel('bump location in final layer')
 
 alldata = alldata[:, :, 1:]
 alldata = alldata.T
 
 for t in range(1):
+    #plot the activity of cells on example trial
     plt.figure()
     plt.imshow(alldata[t, :, :], aspect = 'auto', cmap = 'Greys', vmin=0, vmax=4)
-    #Lcues = trialdata['leftcues'][t]
-    #Rcues = trialdata['rightcues'][t]
     for l in Lcues[:-1]:
         plt.axvline(l*10+300, color = 'b', linestyle = '--')
     for r in Rcues[:-1]:
         plt.axvline(r*10+300, color = 'r', linestyle = '--')
     plt.xlabel('Position')
     plt.ylabel('Neuron')
-    plt.xticks([300])
+    plt.xticks([300], labels=['0'])
     plt.xlim([0, 3300])
-plt.savefig('JointBumpExampleNegativeVelocity.pdf')
+    plt.show()
     
+#plot velocity for the example trial
 plt.figure()
 plt.plot(np.linspace(0, 330, 3301), [v(r) for r in np.linspace(0, 330, 3301)])
-plt.ylim([-2, 2])
+plt.ylim([-100, 100])
 plt.xlim([0, 330])
-plt.xticks([30])
+plt.xticks([30], labels = ['0'])
 plt.axhline(0, color = 'grey', linestyle = '--')
 plt.xlabel('Position')
 plt.ylabel('Velocity')
-plt.savefig('JointBumpExampleVelocitySignal.pdf')
+plt.show()
 
