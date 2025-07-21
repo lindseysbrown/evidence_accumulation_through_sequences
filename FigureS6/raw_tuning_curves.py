@@ -17,14 +17,10 @@ matplotlib.rcParams['pdf.fonttype'] = 42
 matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 from scipy import stats
-from scipy.stats import f_oneway, kurtosis, skew, sem, rankdata
-from scipy.optimize import curve_fit
-import diptest
+from scipy.stats import rankdata
 import pandas as pd
 import matplotlib.gridspec as gs
 from sklearn.preprocessing import minmax_scale
-from scipy.signal import savgol_filter
-from scipy.interpolate import splrep, splev
 import pickle
 
 #demo
@@ -102,7 +98,7 @@ else:
 individual_plots = False
 
 for region in regions:
-    with open(region+"-nonoutliercells.p", "rb") as fp:   #Pickling
+    with open("ExampleData/"+region+"-nonoutliercells.p", "rb") as fp:   #Pickling
         nstoplot = pickle.load(fp)
     
     
