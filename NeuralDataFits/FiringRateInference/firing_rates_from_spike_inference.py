@@ -33,11 +33,26 @@ def rolling_avg(a, windowsize):
     return frs
 
 def gauss_avg(a, windowsize):
+    '''
+    Symmetric Gaussian filter
+    '''
     win = signal.windows.gaussian(windowsize, windowsize/4)
     tot = sum(win)
     frs = np.zeros(np.shape(a))
     for n in range(len(a)):
         frs[n,:] = signal.convolve(a[n], win, mode='same') / tot
+    return frs
+
+def half_gauss_avg(a, windowsize):
+    '''
+    Half Gaussian causal filter
+    '''
+    win = signal.windows.gaussian(2*windowsize, windowsize/4)
+    win = win[:windowsize]
+    tot = sum(win)
+    frs = np.zeros(np.shape(a))
+    for n in range(len(a)):
+        frs[n, :] = signal.convolve(a[n], win, mode = 'same')/tot
     return frs  
 
 data = pickle.load(open('../ACCCho/Suite2p/dFF_tetO_7_07302021_T10/cell0_fr2.p', 'rb')) #load a cell with desired average firing rate
@@ -52,6 +67,7 @@ for f in ACCfiles[:3]:
             n_neurons, n_frames = np.shape(mat['Output']['dFF'][0][0])
             FRs = np.zeros((n_neurons, n_frames))
             FRsgauss = np.zeros((n_neurons, n_frames))
+            FRshalfgauss = np.zeros((n_neurons, n_frames))
             spikes = np.zeros((n_neurons, upfactor*n_frames))
             for n in range(n_neurons)[:5]:
                 fileloc = ACCpath+'/'+f.split('.mat')[0]+'/cell'+str(n)+'_fr2.p'
@@ -62,9 +78,12 @@ for f in ACCfiles[:3]:
                 spikes[n, :] = spikeoccurred
             frs = 60*rolling_avg(spikes, binsize) #get firing rate based on rolling average
             frs_gauss = 60*gauss_avg(spikes, binsize) #get firing rate based on gaussian
+            frs_halfgauss = 60*half_gauss_avg(spikes, binsize) #get firing rate based on half gaussian
             for n in range(n_neurons): #do this for each cell in the session
                 FRs[n, :] = np.mean(frs[n, :].reshape(-1, upfactor), axis=1)
                 FRsgauss[n, :] = np.mean(frs_gauss[n, :].reshape(-1, upfactor), axis=1)
+                FRshalfgauss[n, :] = np.mean(frs_halfgauss[n, :].reshape(-1, upfactor), axis=1)
+
     
     
     
