@@ -17,7 +17,7 @@ demo = True #True to run with example datasets, False to run for full data in st
 
 def modelfit(frs, ev, choices):
     '''
-    fit a linear model to predict firing rates (frs) from cumulative evidences (ev) and signed evidence(ie, current best choice; choices)
+    fit a linear model to predict firing rates (frs) from cumulative evidences (ev) and behavioral choice (choices)
 
     === outputs ===
     beta_ev: coefficient on evidence in the full model
@@ -63,10 +63,11 @@ else:
 sigma=.1
 
 # preprocessing to remove nandata
-data = np.load(infile) #load data array with firing rates (1st column), positions (2nd column), cumulative evidences (3rd column)
+data = np.load(infile) #load data array from correct trials with firing rates (1st column), positions (2nd column), cumulative evidences (3rd column)
 frs = data[:, 0]
 pos = data[:, 1].reshape(-1, 1)
 ev = data[:, 2].reshape(-1, 1)
+choices = np.zeros(len(frs)).reshape(-1, 1) #set up array to store choice data
 
 #remove nan firing rate datapoints
 frsnonnan = frs[~np.isnan(frs)] 
@@ -74,8 +75,41 @@ frsnonnan = minmax_scale(frsnonnan)
 posnonnan = pos[~np.isnan(frs)].reshape(-1, 1)
 evnonnan = ev[~np.isnan(frs)].reshape(-1, 1)
 
-#current best choice predictor is sign of evidence
-choicesnonnan = .5*(np.sign(evnonnan)+1)
+#add choices for correct trials
+i = 65
+while i<len(frs):
+    choices[i-65:i+1] = np.sign(ev[i]) #correct choice based on sign of final evidence in the trial
+    i = i+66
+    
+choicesnonnan = choices[~np.isnan(frs)] 
+
+#load data from incorrect trials
+if not demo:
+    incorrectdatafile = infile.split('/')[0]+'/firingdata-incorrect/'+infile.split('/')[2] #path to incorrect trial data for the same neuron
+else:
+    incorrectdatafile = 153
+dataincorrect = np.load(incorrectdatafile)
+frsincorrect = dataincorrect[:, 0]
+posincorrect = dataincorrect[:, 1].reshape(-1, 1)
+evincorrect = dataincorrect[:, 2].reshape(-1, 1)
+choicesincorrect = np.zeros(len(frsincorrect)).reshape(-1, 1) #placeholder for the choice variable
+frsnonnanincorrect = frsincorrect[~np.isnan(frsincorrect)]
+frsnonnanincorrect = minmax_scale(frsnonnanincorrect)
+posnonnanincorrect = posincorrect[~np.isnan(frsincorrect)].reshape(-1, 1)
+evnonnanincorrect = evincorrect[~np.isnan(frsincorrect)].reshape(-1, 1)
+
+#get the incorrect choices
+i = 65
+while i<len(frsincorrect):
+    choicesincorrect[i-65:i+1] = -1*np.sign(evincorrect[i]) #incorrect choices have opposite sign of evidence
+    i = i+66
+choicesnonnanincorrect = choicesincorrect[~np.isnan(frsincorrect)]
+
+#concatenate correct and incorrect
+frsnonnan = np.concatenate((frsnonnan, frsnonnanincorrect))
+posnonnan = np.concatenate((posnonnan, posnonnanincorrect))
+evnonnan = np.concatenate((evnonnan, evnonnanincorrect))
+choicesnonnan = np.concatenate((choicesnonnan, choicesnonnanincorrect))
 
 #array to save fit parameters at each position
 params = np.zeros((66, 6))
