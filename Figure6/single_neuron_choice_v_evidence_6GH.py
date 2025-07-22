@@ -39,8 +39,8 @@ with open('ExampleData/numtotaltrials.pkl', 'rb') as handle:
 plt.figure()
 for region in regions:
     if not demo:
-        fitparams = np.load(region+'/paramfit/'+region+'allfitparams-linearencoding-signedevidence.npy') #load saved parameters from running encoding model
-        fitneurondata = pd.read_csv(region+'/paramfit/'+region+'allfitparams-linearencoding-neuroninfo-signedevidence.csv') #load neuron, session information corresponding to parameters
+        fitparams = np.load(region+'/paramfit/'+region+'allfitparams-linearencoding.npy') #load saved parameters from running encoding model
+        fitneurondata = pd.read_csv(region+'/paramfit/'+region+'allfitparams-linearencoding-neuroninfo.csv') #load neuron, session information corresponding to parameters
 
     else:
         fitparams = np.load('ExampleData/ACCsingleneuronencoding.npy')
