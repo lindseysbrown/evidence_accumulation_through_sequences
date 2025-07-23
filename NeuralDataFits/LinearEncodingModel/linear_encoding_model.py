@@ -51,9 +51,10 @@ def modelfit(frs, ev, choices):
     
     return beta_ev, beta_choice, beta_i, F_ev, F_choice
 
-arguments = sys.argv[1:]
-infile = arguments[0]
-infile = infile.split('.')[0]+'.npy'
+if not demo:
+    arguments = sys.argv[1:]
+    infile = arguments[0]
+    infile = infile.split('.')[0]+'.npy'
 
 if not demo:
     neuron = int(infile.split('neuron')[1].split('.')[0])
@@ -63,7 +64,10 @@ else:
 sigma=.1
 
 # preprocessing to remove nandata
-data = np.load(infile) #load data array from correct trials with firing rates (1st column), positions (2nd column), cumulative evidences (3rd column)
+if not demo:
+    data = np.load(infile) #load data array from correct trials with firing rates (1st column), positions (2nd column), cumulative evidences (3rd column)
+else:
+    data = np.load('ExampleData/exampleneuron.npy')
 frs = data[:, 0]
 pos = data[:, 1].reshape(-1, 1)
 ev = data[:, 2].reshape(-1, 1)
@@ -87,7 +91,7 @@ choicesnonnan = choices[~np.isnan(frs)]
 if not demo:
     incorrectdatafile = infile.split('/')[0]+'/firingdata-incorrect/'+infile.split('/')[2] #path to incorrect trial data for the same neuron
 else:
-    incorrectdatafile = 153
+    incorrectdatafile = 'ExampleData/exampleneuronincorrect.npy'
 dataincorrect = np.load(incorrectdatafile)
 frsincorrect = dataincorrect[:, 0]
 posincorrect = dataincorrect[:, 1].reshape(-1, 1)
