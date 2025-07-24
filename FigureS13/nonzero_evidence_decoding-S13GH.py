@@ -16,9 +16,7 @@ matplotlib.rcParams['ps.fonttype'] = 42
 matplotlib.rc('font',**{'family':'sans-serif','sans-serif':['Arial']})
 import os
 from scipy.stats import sem, pearsonr
-from scipy.stats import kurtosis, skew
 import pandas as pd
-import pickle
 import statsmodels.api as sm
 from sklearn.model_selection import cross_validate, cross_val_predict
 import sklearn

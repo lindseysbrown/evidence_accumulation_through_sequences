@@ -17,19 +17,50 @@ import os
 import pandas as pd
 import pickle
 from scipy.io import loadmat
-from sklearn.linear_model import LinearRegression, Ridge
-from scipy.stats import sem, zscore
+from sklearn.linear_model import Ridge
+from scipy.stats import sem
+
+demo = True
 
 sigthresh = .05
 
-
 def get_cum_evidence(lefts, rights, pos):
+    '''
+    calculate cumulative evidence at each position in the maze
+    === inputs ===
+    lefts: list of positions of left towers
+    rights: list of positions of right towers
+    pos: list of maze positions
+    '''
     cum_ev = np.zeros(len(pos))
     for i, p in enumerate(pos):
         cum_ev[i] = np.sum(lefts<p)-np.sum(rights<p)
     return cum_ev
 
 def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choices):
+    '''
+    function to get same output format as ACC and DMS data for the RSC and HPC data
+
+    ===inputs===
+    data: array of neural firing data
+    position: positions corresponding to neural data
+    trial: trial numbers correspondig to each data point
+    Lcuepos: position of left cues
+    Rcuepos: position of right cues
+    mazeID: level of the maze in the shaping protocol
+    corrects: mapping of whether each trial was correct
+    choices: mapping of which choice the animal made on each trial
+
+    ===outputs===
+    neuraldata: array of neural data of shape (trials, neurons, timepoints)
+    trialmap: mapping between trial index and trial number
+    maintrials: trials for which accumulation of evidence was required
+    correcttrials: trials for which the animal was correct
+    lefts: left cues for each trial
+    rights: right cues for each trial
+    leftchoices: trials for which the animal made a left choice
+    rightchoices: trials for which the animal made a right choice
+    '''
     n_neurons = np.shape(data)[1]
     trials = list(set([x[0] for x in trial]))
     n_trials = len(trials)
@@ -72,68 +103,50 @@ def get_pos_out(data, position, trial, Lcuepos, Rcuepos, mazeID, corrects, choic
     return np.nan_to_num(neuraldata), trialmap, maintrials, correcttrials, lefts, rights, leftchoices, rightchoices
 
 #get cubic spline basis set
-these_knots = np.linspace(0,300, 4)
-
 x = np.linspace(0., 300, 60)
 y = patsy.bs(x, df=7, degree=3, include_intercept=True)
-plt.subplot(1,2,1)
-plt.plot(x,y)
-plt.title('B-spline basis')
 
+#shorten length for mid cue cues
 y2 = patsy.bs(np.linspace(0, 230, 46), df=7, degree=3, include_intercept=True)
 
+#shortest length for late cues
 y3 = patsy.bs(np.linspace(0, 160, 32), df = 7, degree = 3, include_intercept=True)
 
-#cuelocs = np.zeros(66,)
-#cuelocs[5] = 1
-#cuelocs[8] = 1
+if not demo:
+    regions = ['ACC', 'RSC']
 
-#for i in range(7):
- #   out = convolve(cuelocs, y[:, i], mode = 'full')
-  #  plt.figure()
-   # plt.plot(out)
-    #plt.axvline(5)
-    #plt.axvline(8)
+    #get session files for each region
+    files = os.listdir('./ACC')
+    ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
 
-regions = ['ACC', 'RSC'] #['ACC', 'DMS', 'HPC', 'RSC']
+    files = os.listdir('./RSC')
+    RSCmatfiles = [f for f in files if f.startswith('nic')]
 
-files = os.listdir('./DMS')
-DMSmatfiles = [f for f in files if f.startswith('dFF_scott')]
+    filelist = [ACCmatfiles, RSCmatfiles]
+else:
+    regions = ['ACC']
+    matfiles = ['ExampleData/ACCsessionexample.mat']
+    filelist = [matfiles]
 
-files = os.listdir('./ACC/HalfGaussianFiringRate')
-ACCmatfiles = [f for f in files if f.startswith('dFF_tet')]
-
-files = os.listdir('./V1')
-V1matfiles = [f for f in files if f.startswith('nic')]
-
-files = os.listdir('./RSC/HalfGaussianFiringRate')
-RSCmatfiles = [f for f in files if f.startswith('nic')]
-
-files = os.listdir('./HPC')
-HPCmatfiles = [f for f in files if f.startswith('nic')]
-
-filelist = [ACCmatfiles, RSCmatfiles] #[ACCmatfiles, DMSmatfiles,  HPCmatfiles,  RSCmatfiles]
-
-
-
-alphalist = [1] #[.001, 1, 100]
-
-with open('numcorrecttrials.pkl', 'rb') as handle:
-    numcorrecttrials = pickle.load(handle)
+alphalist = [1] 
 
 for region, matfiles in zip(regions, filelist):
-    fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams-boundedmue-MSE.csv')
+    #load parameters from joint gaussian fit
+    if not demo:
+        fitparams = pd.read_csv(region+'/paramfit/'+region+'allfitparams.csv')
+    else:
+        fitparams = pd.read_csv('ExampleData/ACCparamfitexample.csv')
     fits = fitparams['MSE'].values[fitparams['PvalMSE'].values < .05]
     lefttoLcuekernelsearly = {}
-    lefttoRcuekernelsearly = {}#np.zeros((1, 60))
+    lefttoRcuekernelsearly = {}
     lefttoLcuekernelsmed = {}
     lefttoRcuekernelsmed = {}
-    righttoLcuekernelsearly = {}#np.zeros((1, 60))
-    righttoRcuekernelsearly = {}#np.zeros((1, 60))
-    lefttoLcuekernelslate = {}#np.zeros((1, 60))
-    lefttoRcuekernelslate = {}#np.zeros((1, 60))
-    righttoLcuekernelslate = {}#np.zeros((1, 60))
-    righttoRcuekernelslate = {}#np.zeros((1, 60)) 
+    righttoLcuekernelsearly = {}
+    righttoRcuekernelsearly = {}
+    lefttoLcuekernelslate = {}
+    lefttoRcuekernelslate = {}
+    righttoLcuekernelslate = {}
+    righttoRcuekernelslate = {}
     performance = {}
     
     for a in alphalist:
@@ -150,12 +163,18 @@ for region, matfiles in zip(regions, filelist):
         performance[a] = []
     
     for f, file in enumerate(matfiles):
-        data = loadmat(region+'/HalfGaussianFiringRate/'+file)
+        if not demo:
+            data = loadmat(region+'/HalfGaussianFiringRate/'+file)
+        else:
+            data = loadmat('ExampleData/ACCsessionexample.mat')
         
         if region in ['DMS', 'ACC']:
-            bfile = file.split('dFF_')[1]
-            bfile = bfile.split('processedOutput-NEW.mat')[0]+'.mat'
-            cuedata = loadmat(region+'/Behavior/'+bfile)
+            if not demo:
+                bfile = file.split('dFF_')[1]
+                bfile = bfile.split('processedOutput-NEW.mat')[0]+'.mat'
+                cuedata = loadmat(region+'/Behavior/'+bfile)
+            else:
+                cuedata = loadmat('ExampleData/ACCsessionexample-behavior.mat')
             lefts = cuedata['logSumm']['cuePos_L'][0][0][0]
             rights = cuedata['logSumm']['cuePos_R'][0][0][0]
             
@@ -204,10 +223,11 @@ for region, matfiles in zip(regions, filelist):
             pos = np.arange(-30, 300, 5)
             
             n_trials, n_neurons, n_pos = np.shape(alldata)
-            
-            #alldata[np.isnan(alldata)]=0
         
-        session = file.split('-NEW.')[0]
+        if not demo:
+            session = file.split('-NEW.')[0]
+        else:
+            session = 'dFF_tetO_8_07282021_T10processedOutput'
         fileparams = fitparams[fitparams['Session']==session]
         pvals = fileparams['PvalMSE'].values
         mues = fileparams['Mue'].values
@@ -226,7 +246,7 @@ for region, matfiles in zip(regions, filelist):
         sigps = sigps[vp]
         alldata = alldata[:, evselectiveneurons, :]
 
-        
+        #calculate cumulative evidence at each position
         evidence = np.zeros((n_trials, n_pos))
         for i in range(n_trials):
             evidence[i] = get_cum_evidence(lefts[i], rights[i], pos)
@@ -246,8 +266,6 @@ for region, matfiles in zip(regions, filelist):
         rightmups = mups[rightis]
         leftsigps = sigps[leftis]
         rightsigps = sigps[rightis]
-        
-
         
         #create feature matrix
         X = np.zeros((len(correcttrials)*(n_pos-5), 44))
@@ -271,30 +289,30 @@ for region, matfiles in zip(regions, filelist):
             Rcuelocslate = np.zeros(n_pos,)
             feats = np.concatenate((0*(ps).reshape(-1, 1), 0*es.reshape(-1, 1)), axis = 1)
             for l in lcues:
-                cuebin = np.where((pos-l)>0)[0][0]-1 #previously np.argmin(np.abs(pos-l))
+                cuebin = np.where((pos-l)>0)[0][0]-1 #find bin containing cue position
                 eatcue = evidence[idx, cuebin-2]
-                if l<70:
+                if l<70: #early cue
                     Lcuelocsearly[cuebin-2] = 1 #locked to cue appearance
-                elif l<140:
+                elif l<140: #mid cue
                    Lcuelocsmed[cuebin-2] = 1 
-                else:
+                else: #late cue
                     Lcuelocslate[cuebin-2] = 1
             for r in rcues:
                 cuebin = np.where((pos-r)>0)[0][0]-1
                 eatcue = evidence[idx, cuebin-2]
-                if r<70:
+                if r<70: #early cue
                     Rcuelocsearly[cuebin-2] = 1 #locked to cue appearance
-                elif r<140:
+                elif r<140: #mid cue
                     Rcuelocsmed[cuebin-2] = 1
-                else:
+                else: #late cue
                     Rcuelocslate[cuebin-2] = 1
-            for spl in range(7):
-                zLearly = convolve(Lcuelocsearly[5:], y[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
-                zRearly = convolve(Rcuelocsearly[5:], y[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
-                zLmed = convolve(Lcuelocsmed[5:], y2[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
-                zRmed = convolve(Rcuelocsmed[5:], y2[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
-                zLlate = convolve(Lcuelocslate[5:], y3[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
-                zRlate = convolve(Rcuelocslate[5:], y3[:, spl], mode = 'full')[:(n_pos-5)]#[5:n_pos]
+            for spl in range(7): #convolve cue timings with splines
+                zLearly = convolve(Lcuelocsearly[5:], y[:, spl], mode = 'full')[:(n_pos-5)]
+                zRearly = convolve(Rcuelocsearly[5:], y[:, spl], mode = 'full')[:(n_pos-5)]
+                zLmed = convolve(Lcuelocsmed[5:], y2[:, spl], mode = 'full')[:(n_pos-5)]
+                zRmed = convolve(Rcuelocsmed[5:], y2[:, spl], mode = 'full')[:(n_pos-5)]
+                zLlate = convolve(Lcuelocslate[5:], y3[:, spl], mode = 'full')[:(n_pos-5)]
+                zRlate = convolve(Rcuelocslate[5:], y3[:, spl], mode = 'full')[:(n_pos-5)]
                 feats = np.concatenate((feats, zLearly.reshape(-1, 1), zRearly.reshape(-1, 1), zLmed.reshape(-1,1), zRmed.reshape(-1,1), zLlate.reshape(-1, 1), zRlate.reshape(-1, 1)), axis = 1)
             X[idx*(n_pos-5):(idx+1)*(n_pos-5), :] = feats
         
@@ -304,35 +322,21 @@ for region, matfiles in zip(regions, filelist):
             for i, p in enumerate(pos):
                 validns = np.where(np.abs(leftmups-p)<leftsigps)[0]
                 lefttotal[:, i] = np.nanmean(leftactivity[:, validns, i], axis=1)
-            #lefttotal = lefttotal-np.nanmean(lefttotal, axis=0)
-            #muL = np.nanmean(lefttotal[:, :6], axis=1)
-            #sigL = np.nanstd(lefttotal[:, :6], axis = 1)
-            #lefttotal = lefttotal - muL.reshape(-1, 1)
-            #lefttotal = lefttotal/sigL.reshape(-1, 1)
             lefttotal = lefttotal[:, 5:]
-            #lefttotal[lchoices] = lefttotal[lchoices]-np.nanmean(lefttotal[lchoices], axis=0)
-            #lefttotal[rchoices] = lefttotal[rchoices]-np.nanmean(lefttotal[rchoices], axis=0)
+
             
             rightactivity = alldata[:, rightis, :] 
             righttotal = np.nanmean(rightactivity, axis = 1)
             for i, p in enumerate(pos):
                 validns = np.where(np.abs(rightmups-p)<rightsigps)[0]
                 righttotal[:, i] = np.nanmean(rightactivity[:, validns, i], axis=1) 
-            #righttotal = righttotal-np.nanmean(righttotal, axis=0)
-            #muR = np.nanmean(righttotal[:, :6], axis=1)
-            #sigR = np.nanstd(righttotal[:, :6], axis = 1)
-            #righttotal = righttotal - muR.reshape(-1, 1)
-            #righttotal = righttotal/sigR.reshape(-1,1)
+
             righttotal = righttotal[:, 5:]
-            #righttotal[lchoices] = righttotal[lchoices]-np.nanmean(righttotal[lchoices], axis=0)
-            #righttotal[rchoices] = righttotal[rchoices]-np.nanmean(righttotal[rchoices], axis=0)
+
             
             difftotal = (lefttotal - np.nanmean(lefttotal, axis=0))-(righttotal-np.nanmean(righttotal, axis=0))
             
-            #difftotal = difftotal - np.nanmean(difftotal, axis=0)
-            #difftotal = lefttotal-righttotal
-
-            #difftotal = difftotal-difftotal[:,0].reshape(-1, 1)
+            #predict difference in left and right population firing rates
             yd = difftotal.flatten()            
             
 
@@ -340,36 +344,13 @@ for region, matfiles in zip(regions, filelist):
             X = X[~np.isnan(yd)]
             yd = yd[~np.isnan(yd)]
             
+            #fit ridge regression model
             for a in alphalist:
                 model = Ridge(alpha=a)
                 model.fit(X, yd)
                 coefs = model.coef_
                 
                 ypred = model.predict(X)
-                
-                '''
-                if f<4:
-                    plt.figure()
-                    for ex in range(5):
-                        efinal = evidence[ex, -1]
-                        if efinal<0:
-                            c = 'blue'
-                        else:
-                            c = 'red'
-                        alph = np.abs(efinal)/8
-                        plt.plot(yd[ex*60:(ex+1)*60], color = c, alpha = alph)
-                        plt.plot(ypred[ex*60:(ex+1)*60], linestyle='--', color = c, alpha =alph)
-                        plt.title(region)
-                        
-                    plt.figure()
-                    plt.plot(yd[:300], color = 'black')
-                    plt.plot(ypred[:300], linestyle = '--', color = 'black')
-                    plt.axvline(60, color = 'grey', linestyle = '--')
-                    plt.axvline(120, color = 'grey', linestyle = '--')
-                    plt.axvline(180, color = 'grey', linestyle = '--')
-                    plt.axvline(240, color = 'grey', linestyle = '--')
-                    plt.title(region)
-                '''
                     
                     
             
@@ -387,7 +368,7 @@ for region, matfiles in zip(regions, filelist):
                 lefttoLcuekernelslate[a] = np.vstack((lefttoLcuekernelslate[a], Lcuekernellate))
                 lefttoRcuekernelslate[a] = np.vstack((lefttoRcuekernelslate[a], Rcuekernellate)) 
                 
-                performance[a].append(model.score(X, yd))
+                performance[a].append(model.score(X, yd)) #calculate r^2
             
 
               
@@ -402,40 +383,7 @@ for region, matfiles in zip(regions, filelist):
         
         perf = np.mean(performance[a])
         
-        '''
-        plt.figure()
-        plt.errorbar(np.arange(0, 300, 5), np.nanmean(lefttoLcuekernelsearly[a], axis=0), yerr = sem(lefttoLcuekernelsearly[a], axis=0, nan_policy='omit'), color = 'red')
-        plt.errorbar(np.arange(0, 300, 5), np.nanmean(lefttoRcuekernelsearly[a], axis=0), yerr = sem(lefttoRcuekernelsearly[a], axis=0, nan_policy='omit'), color = 'blue')
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoLcuekernelsearly, axis=0), yerr = sem(righttoLcuekernelsearly, axis=0, nan_policy='omit'), color = 'blue', alpha=.5)
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoRcuekernelsearly, axis=0), yerr = sem(righttoRcuekernelsearly, axis=0, nan_policy='omit'), color = 'blue')
-        plt.xlabel('distance from cue appearance (cm)')
-        plt.ylabel('kernel amplitude')
-        plt.ylim([-.1, .1])
-        plt.axhline(0, color = 'k', linestyle = '--')
-        plt.title(region+'- low ev. cues'+', alpha = '+str(a)+', r2 ='+str(perf))
-        
-        plt.figure()
-        plt.errorbar(np.arange(0, 200, 5), np.nanmean(lefttoLcuekernelsmed[a], axis=0), yerr = sem(lefttoLcuekernelsmed[a], axis=0, nan_policy='omit'), color = 'red')
-        plt.errorbar(np.arange(0, 200, 5), np.nanmean(lefttoRcuekernelsmed[a], axis=0), yerr = sem(lefttoRcuekernelsmed[a], axis=0, nan_policy='omit'), color = 'blue')
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoLcuekernelsearly, axis=0), yerr = sem(righttoLcuekernelsearly, axis=0, nan_policy='omit'), color = 'blue', alpha=.5)
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoRcuekernelsearly, axis=0), yerr = sem(righttoRcuekernelsearly, axis=0, nan_policy='omit'), color = 'blue')
-        plt.xlabel('distance from cue appearance (cm)')
-        plt.ylabel('kernel amplitude')
-        plt.ylim([-.1, .1])
-        plt.axhline(0, color = 'k', linestyle = '--')
-        plt.title(region+'- med ev. cues'+', alpha = '+str(a)+', r2 ='+str(perf))
-    
-        plt.figure()
-        plt.errorbar(np.arange(0, 200, 5), np.nanmean(lefttoLcuekernelslate[a], axis=0), yerr = sem(lefttoLcuekernelslate[a], axis=0, nan_policy='omit'), color = 'red')
-        plt.errorbar(np.arange(0, 200, 5), np.nanmean(lefttoRcuekernelslate[a], axis=0), yerr = sem(lefttoRcuekernelslate[a], axis=0, nan_policy='omit'), color = 'blue')
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoLcuekernelslate, axis=0), yerr = sem(righttoLcuekernelslate, axis=0, nan_policy='omit'), color = 'blue', alpha=.5)
-        #plt.errorbar(np.arange(0, 300, 5), np.nanmean(righttoRcuekernelslate, axis=0), yerr = sem(righttoRcuekernelslate, axis=0, nan_policy='omit'), color = 'blue')
-        plt.xlabel('distance from cue appearance (cm)')
-        plt.ylabel('kernel amplitude')
-        plt.ylim([-.1, .1])
-        plt.axhline(0, color = 'k', linestyle = '--')
-        plt.title(region+'- high ev. cues'+', alpha = '+str(a)+', r2 ='+str(perf))
-        '''
+
         
         plt.figure()
         plt.errorbar(np.arange(0, 300, 5), np.nanmean(lefttoLcuekernelsearly[a], axis=0), yerr = sem(lefttoLcuekernelsearly[a], axis=0, nan_policy='omit'), color = 'red', alpha = .3)
@@ -444,12 +392,9 @@ for region, matfiles in zip(regions, filelist):
         plt.errorbar(np.arange(0, 230, 5), np.nanmean(lefttoRcuekernelsmed[a], axis=0), yerr = sem(lefttoRcuekernelsmed[a], axis=0, nan_policy='omit'), color = 'blue', alpha = .6)
         plt.errorbar(np.arange(0, 160, 5), np.nanmean(lefttoLcuekernelslate[a], axis=0), yerr = sem(lefttoLcuekernelslate[a], axis=0, nan_policy='omit'), color = 'red')
         plt.errorbar(np.arange(0, 160, 5), np.nanmean(lefttoRcuekernelslate[a], axis=0), yerr = sem(lefttoRcuekernelslate[a], axis=0, nan_policy='omit'), color = 'blue')
-        #plt.axvline(0, linestyle = '--', color = 'k')
-        #plt.axvline(10, linestyle = '--', color = 'grey')
         plt.xlabel('distance from cue appearance (cm)')
         plt.ylabel('kernel amplitude')
-        #plt.ylim([-.1, .1])
         plt.xlim([0, 200])
         plt.axhline(0, color = 'k', linestyle = '--')
         plt.title(region+', alpha = '+str(a)+', r2 ='+str(perf))
-        plt.savefig('Figure4Plots/CueResponse/'+region+'3PosCueKernels.pdf')                         
+        plt.show()                        
