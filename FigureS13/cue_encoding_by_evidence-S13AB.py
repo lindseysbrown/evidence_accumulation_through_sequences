@@ -17,8 +17,8 @@ import os
 import pandas as pd
 import pickle
 from scipy.io import loadmat
-from sklearn.linear_model import LinearRegression, Ridge
-from scipy.stats import sem, pearsonr
+from sklearn.linear_model import Ridge
+from scipy.stats import sem
 
 demo = True
 
