@@ -1,6 +1,6 @@
 # evidence_accumulation_through_sequences
 
-This repository contains models and analysis code for Brown et al. 2023, bioRxiv to reproduce each figure.
+This repository contains models and analysis code for Brown et al. 2025, bioRxiv (https://doi.org/10.1101/2023.09.01.555612) to reproduce each figure. Full datasets for anterior cingulate cortex, dorsomedial striatum, and hippocampus can be found at https://doi.org/10.6084/m9.figshare.30921038.
 
 # System Requirements
 Code has been developed and run on Windows 10. All code can be run on a standard personal computer.
@@ -33,7 +33,7 @@ Code for Figures 1, 5, 6, S1, and S5 should produce plots in less than 5 minutes
 Fits of the joint gaussian and linear encoding model to individual cells should each take less than 10 minutes.
 
 # Instructions for Use
-Each folder contains the scripts necessary to reproduce each subpanel in the figure. To reproduce the full results, scripts should be run with the input files replaced with the appropriate data files, which will be made available via figshare.
+Each folder contains the scripts necessary to reproduce each subpanel in the figure. To reproduce the full results, scripts should be run with the input files replaced with the appropriate data files, which are available on Figshare (https://doi.org/10.6084/m9.figshare.30921038).
 
 Code to produce data panels in Figure S4 and Figure S5 is identical to that from the corresponding plots in the main figures (Figure 5CD and Figure 6LM, respectively) but run for different datasets, corresponding to either the model simulations or recordings from DMS. Panels in Figures S7-S10 are generated identically to the plots in Figure 5A, but for different example neurons. Panels in Figure S12 can be produced using the code for Figure 5CDGHKL and setting the parameter 'percentage_fit' to 'False'.
 
