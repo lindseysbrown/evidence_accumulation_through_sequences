@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/731767088.svg)](https://doi.org/10.5281/zenodo.18040040)
+
 # evidence_accumulation_through_sequences
 
 This repository contains models and analysis code for Brown et al. 2025, bioRxiv (https://doi.org/10.1101/2023.09.01.555612) to reproduce each figure. Full datasets for anterior cingulate cortex, dorsomedial striatum, and hippocampus can be found at https://doi.org/10.6084/m9.figshare.30921038.
